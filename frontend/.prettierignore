@@ -1,0 +1,21 @@
+# Ignore build output directories
+dist/
+
+# Ignore node modules
+node_modules/
+
+# Ignore specific configuration files
+*.config.js
+
+# Ignore environment variable files
+.env
+.env.*
+
+# Ignore lock files
+package-lock.json
+
+# Ignore logs
+*.log
+
+# Ignore other generated files
+coverage/

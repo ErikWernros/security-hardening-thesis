@@ -1,0 +1,8 @@
+DATABASE_URL="postgresql://postgres.uetqqrmjaiqvvuxcufsh:IsagDB__71I@aws-0-eu-north-1.pooler.supabase.com:5432/postgres"
+JWT_SECRET="UN_SECRETO_DE_JWT_MUY_LARGO_Y_SEGURO_PARA_PRODUCCION"
+FRONTEND_URL="http://localhost:5001"
+# Azure AD Credentials (leave blank for development)
+AZURE_AD_CLIENT_ID=""
+AZURE_AD_CLIENT_SECRET=""
+AZURE_AD_TENANT_ID=""
+REDIRECT_URL="http://localhost:3001/auth/callback"

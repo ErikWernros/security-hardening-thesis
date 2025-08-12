@@ -1,0 +1,109 @@
+/**
+ * ---------------------------------------------------------
+ * Project: ISAG AB
+ * Developer Full Stack: Darwin Rengifo
+ * Create Date: 2025-07-21
+ * Design Name: schema.prisma
+ * Tools: Javascript, NodeJs, Express, Prisma, Postgres(In Supabase),
+ * Description:
+ * This file is the schema of the database,
+ * where the tables and relationships are defined.
+ * -----------------------------------------------------------
+ */
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * Role for the user
+ */
+enum Role {
+  Admin
+  Assessor
+  Viewer
+}
+
+model User {
+  id          Int     @id @default(autoincrement())
+  email       String  @unique
+  displayName String?
+  role        Role    @default(Viewer)
+
+  // Relation: A user can submit many answers (Svar)
+  svars Svar[]
+}
+
+model Del {
+  id   Int    @id @default(autoincrement())
+  kod  String @unique // Add unique constraint
+  namn String
+
+  // Relation: A 'Del' contains many 'Avsnitt'
+  avsnitts Avsnitt[]
+}
+
+model Avsnitt {
+  id   Int    @id @default(autoincrement())
+  kod  String
+  namn String
+
+  delId Int
+  del   Del @relation(fields: [delId], references: [id])
+
+  // Relation: An 'Avsnitt' contains many 'Stycke'
+  styckes Stycke[]
+
+  @@unique([kod, delId]) // Add composite unique constraint
+}
+
+model Stycke {
+  id   Int    @id @default(autoincrement())
+  kod  String
+  namn String
+
+  avsnittId Int
+  avsnitt   Avsnitt @relation(fields: [avsnittId], references: [id])
+
+  // Relation: A 'Stycke' contains many 'Krav'
+  kravs Krav[]
+
+  @@unique([kod, avsnittId]) // Add composite unique constraint
+}
+
+model Krav {
+  id        Int     @id @default(autoincrement())
+  kod       String  @unique
+  kravText  String
+  anvisning String?
+
+  styckeId Int
+  stycke   Stycke @relation(fields: [styckeId], references: [id])
+
+  // Relation: A 'Krav' can have many 'Svar'
+  svars Svar[]
+}
+
+model Svar {
+  id        Int      @id @default(autoincrement())
+  betyg     Int? // Corresponds to 'betyg' (smallint -> Int), optional
+  jaNej     Boolean?
+  verifikat String?
+  kommentar String?
+  createdAt DateTime @default(now())
+
+  kravId Int
+  krav   Krav @relation(fields: [kravId], references: [id])
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  // ADD THIS: Ensures a user can only have one answer per requirement.
+  // This is crucial for the 'upsert' logic.
+  @@unique([kravId, userId])
+}

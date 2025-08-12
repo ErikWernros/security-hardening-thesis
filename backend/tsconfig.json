@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    // This is crucial for Node.js module resolution.
+    "module": "NodeNext",
+    // This enables understanding of "node:" prefixes.
+    "moduleResolution": "NodeNext",
+    // Explicitly loads Node.js types.
+    "types": ["node", "express",
+        "multer"],
+    "target": "ES2022",
+    "outDir": "./dist",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true
+  },
+  // We add eslint.config.js so that TypeScript also parses it.
+  "include": ["src/**/*", "eslint.config.js"]
+}

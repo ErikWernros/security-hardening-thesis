@@ -1,0 +1,56 @@
+{
+  // =================================================================
+  // == CONFIGURACIÓN DE GUARDADO AUTOMÁTICO
+  // =================================================================
+
+  // 1. Activa el formateo cada vez que se guarda un archivo.
+  // Esto llamará al formateador por defecto definido más abajo.
+  "editor.formatOnSave": true,
+
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ],
+  // 2. Ejecuta acciones de código al guardar.
+  // Específicamente, le decimos a la extensión ESLint que intente
+  // arreglar todos los problemas que pueda (incluyendo los de Prettier).
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+  // =================================================================
+  // == FORMATEADOR POR DEFECTO POR LENGUAJE
+  // =================================================================
+  // Esta sección es la más importante. Le dice a VS Code que SIEMPRE
+  // use 'esbenp.prettier-vscode' para estos tipos de archivo,
+  // SOBREESCRIBIENDO CUALQUIER CONFIGURACIÓN DE USUARIO que tengas.
+
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  // =================================================================
+  // == CONFIGURACIÓN ESPECIAL PARA PRISMA
+  // =================================================================
+
+  "[prisma]": {
+    "editor.defaultFormatter": "Prisma.prisma"
+  }
+}
