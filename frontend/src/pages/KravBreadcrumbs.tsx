@@ -29,20 +29,35 @@ export const KravBreadcrumbs: React.FC<KravBreadcrumbsProps> = ({
       '
       style={mobileStyle}
     >
-      <span className='truncate max-w-[40vw] sm:max-w-[30vw] md:max-w-[30vw]'>
-        {styckeParents?.delKod ?? 'Del'}
-        {styckeParents?.delNamn ? ` – ${styckeParents.delNamn}` : ''}
-      </span>
-      <ChevronRight className='h-4 w-4 shrink-0 opacity-60' />
-      <span className='truncate max-w-[40vw] sm:max-w-[30vw] md:max-w-[30vw]'>
-        {styckeParents?.avsnittKod ?? 'Avsnitt'}
-        {styckeParents?.avsnittNamn ? ` – ${styckeParents.avsnittNamn}` : ''}
-      </span>
-      <ChevronRight className='h-4 w-4 shrink-0 opacity-60' />
-      <span className='truncate max-w-[48vw] sm:max-w-[40vw] md:max-w-[28vw] font-medium text-foreground'>
-        {styckeParents?.styckeKod ?? 'Stycke'}
-        {styckeParents?.styckeNamn ? ` – ${styckeParents.styckeNamn}` : ''}
-      </span>
+      {/* Vertical stack: one line per level */}
+      <div className='flex flex-col gap-1'>
+        {/* Line 1: Del (text wraps; chevron stays in the same line) */}
+        <div className='flex items-start gap-1'>
+          <span className='min-w-0 whitespace-normal break-words'>
+            {/* Show full text, never truncate */}
+            {styckeParents?.delKod ?? 'Del'}
+            {styckeParents?.delNamn ? ` – ${styckeParents.delNamn}` : ''}
+          </span>
+          <ChevronRight className='h-4 w-4 shrink-0 opacity-60 mt-0.5' />
+        </div>
+
+        {/* Line 2: Avsnitt (text wraps; chevron stays in the same line) */}
+        <div className='flex items-start gap-1'>
+          <span className='min-w-0 whitespace-normal break-words'>
+            {styckeParents?.avsnittKod ?? 'Avsnitt'}
+            {styckeParents?.avsnittNamn ? ` – ${styckeParents.avsnittNamn}` : ''}
+          </span>
+          <ChevronRight className='h-4 w-4 shrink-0 opacity-60 mt-0.5' />
+        </div>
+
+        {/* Line 3: Stycke (last item, no chevron) */}
+        <div className='flex items-start'>
+          <span className='min-w-0 whitespace-normal break-words font-medium text-foreground'>
+            {styckeParents?.styckeKod ?? 'Stycke'}
+            {styckeParents?.styckeNamn ? ` – ${styckeParents.styckeNamn}` : ''}
+          </span>
+        </div>
+      </div>
     </nav>
   );
 };

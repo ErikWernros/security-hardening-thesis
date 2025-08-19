@@ -78,7 +78,7 @@ export const KravTreeAndTable = () => {
 
   // -------------------------------------
   // Query 1: Get parents IDs for current stycke
-  // Devuelve { delId, avsnittId }
+  // Return { delId, avsnittId }
   // -------------------------------------
   const { data: parentsIds } = useQuery<RawParents | null>({
     queryKey: ['styckeParentsIds', selectedStyckeId],
@@ -96,8 +96,8 @@ export const KravTreeAndTable = () => {
 
   // -------------------------------------
   // Query 2: Resolve names/codes for breadcrumb using existing lists
-  // Usa /api/del, /api/avsnitt?delId, /api/stycke?avsnittId
-  // y filtra por IDs para obtener {kod, namn}
+  // Use /api/del, /api/avsnit?delId, /api/stück?avsnitId
+  // and filter by IDs to obtain {code, name}
   // -------------------------------------
   const { data: styckeParents } = useQuery<KravBreadcrumbsProps['styckeParents']>({
     queryKey: ['styckeParentsResolved', parentsIds?.delId, parentsIds?.avsnittId, selectedStyckeId],
@@ -225,7 +225,7 @@ export const KravTreeAndTable = () => {
             </Sheet>
 
             {/* Breadcrumbs: now receives real names/codes */}
-            {/* Optional: to avoid placeholders while loading, KravBreadcrumbs puede retornar null si styckeParents es null */}
+            {/* Optional: to avoid placeholders while loading, KravBreadcrumbs can return null if styckeParents is null */}
             <KravBreadcrumbs styckeParents={styckeParents ?? undefined} />
           </div>
         </div>

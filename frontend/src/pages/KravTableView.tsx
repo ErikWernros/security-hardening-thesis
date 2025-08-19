@@ -260,7 +260,7 @@ const KravRowEditable = ({
         />
       </div>
 
-      {/* comentario */}
+      {/* kommentar */}
       <div className='flex flex-col gap-1'>
         <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
           Kommentar

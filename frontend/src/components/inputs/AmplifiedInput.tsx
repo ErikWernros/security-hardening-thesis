@@ -3,7 +3,7 @@ import * as React from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+//import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { X } from 'lucide-react';
 
 // Detect mobile by media query
@@ -226,7 +226,7 @@ export const AmplifiedInput = React.forwardRef<HTMLInputElement, AmplifiedInputP
     }, [isMobile, value]);
 
     React.useEffect(() => {
-      // Recalcular en rotaciones o cambios de tamaño
+      // Recalculate on rotations or size changes
       const onResize = () => {
         if (isMobile && mobileAreaRef.current) autoSize(mobileAreaRef.current);
       };
@@ -236,7 +236,7 @@ export const AmplifiedInput = React.forwardRef<HTMLInputElement, AmplifiedInputP
 
     const MobileAmplified = (
       <>
-        {/* Nota: En móvil solo hay un Textarea que crece con las líneas */}
+        {/* Note: On mobile there is only one Textarea that grows with the lines */}
         <Textarea
           ref={mobileAreaRef}
           value={value ?? ''}
@@ -247,7 +247,7 @@ export const AmplifiedInput = React.forwardRef<HTMLInputElement, AmplifiedInputP
           onInput={(e) => autoSize(e.currentTarget as HTMLTextAreaElement)}
           onFocus={(e) => {
             setActive(true);
-            // No hay vista previa: el textarea es el editor
+            // No preview: the textarea is the editor
             rest.onFocus?.(e as unknown as React.FocusEvent<HTMLInputElement>);
           }}
           onBlur={(e) => {
@@ -255,18 +255,18 @@ export const AmplifiedInput = React.forwardRef<HTMLInputElement, AmplifiedInputP
             handleBlurTextarea(e);
           }}
           onKeyDown={(e) => {
-            // En móvil, Enter inserta nueva línea por defecto (crece con contenido)
+            // On mobile, Enter inserts a new line by default (grows with content)
             handleKeyDownTextarea(e);
           }}
           placeholder={placeholder}
           className={[
             'w-full text-base leading-relaxed whitespace-pre-wrap break-words resize-none',
-            // Alturas mínimas razonables en móvil
+            // Reasonable minimum heights on mobile
             'min-h-12 px-3 py-2 rounded-md',
             active ? 'ring-2 ring-primary/55 ring-offset-1 transition-shadow' : 'transition-shadow',
             className ?? '',
           ].join(' ')}
-          // Asegura que el contenido haga wrap y no overflow
+          // Ensures that the content wraps and does not overflow
           style={{
             overflow: 'hidden',
           }}
