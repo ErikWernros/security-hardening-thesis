@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useKravList, useKravUpdate } from '@/hooks/useKrav';
 import { useSvarSave } from '@/hooks/useSvar';
 import { type Krav } from '@/types/domainTypes';
-import { Input } from '@/components/ui/input';
+//import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { AmplifiedInput } from '@/components/inputs/AmplifiedInput';
 
 type CellRef = HTMLInputElement | HTMLButtonElement | null;
 
@@ -174,7 +175,7 @@ const KravRowEditable = ({
         <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
           Krav
         </span>
-        <Input
+        <AmplifiedInput
           ref={setCellRef(0)}
           value={formState.kravText}
           onChange={(e) => setFormState((s) => ({ ...s, kravText: e.target.value }))}
@@ -190,7 +191,7 @@ const KravRowEditable = ({
         <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
           Anvisning
         </span>
-        <Input
+        <AmplifiedInput
           ref={setCellRef(1)}
           value={formState.anvisning}
           onChange={(e) => setFormState((s) => ({ ...s, anvisning: e.target.value }))}
@@ -248,7 +249,7 @@ const KravRowEditable = ({
         <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
           Verifikat
         </span>
-        <Input
+        <AmplifiedInput
           ref={setCellRef(4)}
           value={formState.verifikat}
           onChange={(e) => setFormState((s) => ({ ...s, verifikat: e.target.value }))}
@@ -262,15 +263,15 @@ const KravRowEditable = ({
       {/* comentario */}
       <div className='flex flex-col gap-1'>
         <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
-          Comentario
+          Kommentar
         </span>
-        <Input
+        <AmplifiedInput
           ref={setCellRef(5)}
           value={formState.kommentar}
           onChange={(e) => setFormState((s) => ({ ...s, kommentar: e.target.value }))}
           onBlur={handleBlur}
           onKeyDown={(e) => handleKeyDown(e, 5)}
-          placeholder='Comentario'
+          placeholder='Kommentar'
           className='h-11 md:h-9 text-sm'
         />
       </div>

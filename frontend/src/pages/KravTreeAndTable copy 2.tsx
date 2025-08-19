@@ -1,72 +1,103 @@
 // src/pages/KravTreeAndTable.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useDelList } from '@/hooks/useDel';
 import { apiClient } from '@/lib/axios';
 import { NavigationTree } from './NavigationTree';
 import { KravTableView } from './KravTableView';
+import { KravBreadcrumbs } from './KravBreadcrumbs';
 
-// UI/Icons (keep names intact elsewhere; adding imports is allowed)
-// -- Using shadcn/ui primitives already present in the project
+// UI
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
-import { PanelLeft, ChevronRight } from 'lucide-react';
+import { PanelLeft } from 'lucide-react';
+
+// 🔐 Tipos existentes
+import type { KravBreadcrumbsProps } from '@/types/domainTypes';
+
+// -----------------------------
+// Backend raw response types (adjust if your API differs)
+// -----------------------------
+interface NodeInfo {
+  id: number;
+  kod: string;
+  namn: string;
+}
+interface RawStyckeParents {
+  del?: NodeInfo;
+  avsnitt?: NodeInfo;
+  stycke?: NodeInfo;
+}
+
+// -----------------------------
+// Normalizer → returns EXACT shape KravBreadcrumbs expects
+// -----------------------------
+/** Maps API payload to the flat props that KravBreadcrumbs uses. */
+function normalizeStyckeParents(
+  data: RawStyckeParents | null,
+): KravBreadcrumbsProps['styckeParents'] {
+  if (!data?.del || !data?.avsnitt || !data?.stycke) return null;
+  return {
+    delKod: data.del.kod,
+    delNamn: data.del.namn,
+    avsnittKod: data.avsnitt.kod,
+    avsnittNamn: data.avsnitt.namn,
+    styckeKod: data.stycke.kod,
+    styckeNamn: data.stycke.namn,
+  };
+}
 
 export const KravTreeAndTable = () => {
   const location = useLocation();
-  const queryParams = new URLSearchParams(location.search);
+  const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const urlStyckeId = queryParams.get('styckeId');
 
   const [selectedStyckeId, setSelectedStyckeId] = useState<number | null>(() => {
-    if (urlStyckeId) return parseInt(urlStyckeId);
+    if (urlStyckeId) return parseInt(urlStyckeId, 10);
     const stored = localStorage.getItem('selectedStyckeId');
-    return stored ? parseInt(stored) : null;
+    return stored ? parseInt(stored, 10) : null;
   });
 
   const { data: delList = [] } = useDelList();
 
-  const { data: styckeParents } = useQuery({
+  // ✅ Tipado estricto: el dato que consume KravBreadcrumbs
+  const { data: styckeParents } = useQuery<KravBreadcrumbsProps['styckeParents']>({
     queryKey: ['styckeParents', selectedStyckeId],
     queryFn: async () => {
       if (!selectedStyckeId) return null;
-      const res = await apiClient.get(`/api/stycke/${selectedStyckeId}/parents`);
-      return res.data;
+      const res = await apiClient.get<RawStyckeParents>(`/api/stycke/${selectedStyckeId}/parents`);
+
+      if (import.meta.env.DEV) {
+        console.debug('[parents raw]', res.data);
+      }
+
+      return normalizeStyckeParents(res.data ?? null);
     },
     enabled: !!selectedStyckeId,
   });
 
   const [expandedDelId, setExpandedDelId] = useState<number | null>(null);
   const [expandedAvsnittId, setExpandedAvsnittId] = useState<number | null>(null);
-
-  // New: mobile nav sheet state (responsive)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    if (styckeParents) {
-      setExpandedDelId(styckeParents.delId);
-      setExpandedAvsnittId(styckeParents.avsnittId);
-    }
+    // NOTE: we don’t have ids in breadcrumbs; expand state can be handled elsewhere if needed
+    // If you need ids, fetch them in parallel or extend the API to include them.
   }, [styckeParents]);
 
   const handleSelectStycke = (id: number) => {
     setSelectedStyckeId(id);
     localStorage.setItem('selectedStyckeId', id.toString());
-    // Close mobile sheet once user selects a node
     setIsMobileNavOpen(false);
   };
 
   return (
-    <div
-      className='flex h-[calc(100vh-4rem)] w-full bg-gradient-to-b from-background to-muted/40
-                 sm:h-[calc(100vh-6rem)]'
-      // NOTE(UX): full-height workspace below the app header
-    >
-      {/* Desktop Sidebar */}
+    <div className='flex h-[calc(100vh-4rem)] w-full bg-gradient-to-b from-background to-muted/40 sm:h-[calc(100vh-6rem)]'>
+      {/* Sidebar */}
       <aside
-        className='hidden lg:block w-[360px] max-w-[40vw] border-r bg-card/50 backdrop-blur-sm
-                   overflow-auto p-3 md:p-4'
+        className='hidden lg:block w-[360px] max-w-[40vw] border-r bg-card/50 backdrop-blur-sm overflow-auto p-3 md:p-4'
         aria-label='Navigationspanel'
       >
         <div className='sticky top-0 z-10 bg-card/70 backdrop-blur-sm -mx-3 md:-mx-4 px-3 md:px-4 py-2'>
@@ -84,15 +115,10 @@ export const KravTreeAndTable = () => {
         />
       </aside>
 
-      {/* Main area */}
+      {/* Main */}
       <main className='flex-1 overflow-hidden flex flex-col'>
-        {/* Top bar: mobile trigger + breadcrumbs */}
-        <div
-          className='sticky top-0 z-20 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60
-                     border-b px-3 md:px-4 py-2'
-        >
+        <div className='sticky top-0 z-20 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b px-3 md:px-4 py-2'>
           <div className='flex items-center gap-2'>
-            {/* Mobile open sidebar */}
             <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
               <SheetTrigger asChild className='lg:hidden'>
                 <Button variant='outline' size='icon' aria-label='Öppna navigation'>
@@ -105,7 +131,6 @@ export const KravTreeAndTable = () => {
                 </SheetHeader>
                 <Separator />
                 <div className='h-[calc(100%-3.5rem)] overflow-auto p-3 md:p-4'>
-                  {/* NOTE(UX): reusing the same tree inside the sheet */}
                   <NavigationTree
                     delList={delList}
                     selectedStyckeId={selectedStyckeId}
@@ -119,53 +144,23 @@ export const KravTreeAndTable = () => {
               </SheetContent>
             </Sheet>
 
-            {/* Breadcrumbs using styckeParents when available */}
-            <nav
-              className='flex items-center gap-1 text-sm text-muted-foreground overflow-x-auto'
-              aria-label='Brödsmulor'
-            >
-              <span className='truncate max-w-[20vw] sm:max-w-[25vw] md:max-w-[30vw]'>
-                {styckeParents?.delKod ?? 'Del'}
-                {styckeParents?.delNamn ? ` – ${styckeParents.delNamn}` : ''}
-              </span>
-              <ChevronRight className='h-4 w-4 shrink-0 opacity-60' />
-              <span className='truncate max-w-[20vw] sm:max-w-[25vw] md:max-w-[30vw]'>
-                {styckeParents?.avsnittKod ?? 'Avsnitt'}
-                {styckeParents?.avsnittNamn ? ` – ${styckeParents.avsnittNamn}` : ''}
-              </span>
-              <ChevronRight className='h-4 w-4 shrink-0 opacity-60' />
-              <span className='truncate max-w-[28vw] font-medium text-foreground'>
-                {styckeParents?.styckeKod ?? 'Stycke'}
-                {styckeParents?.styckeNamn ? ` – ${styckeParents.styckeNamn}` : ''}
-              </span>
-            </nav>
+            {/* 👉 Breadcrumbs recibe exactamente tu interfaz */}
+            <KravBreadcrumbs styckeParents={styckeParents} />
           </div>
         </div>
 
-        {/* Content area with its own scroll */}
         <div className='flex-1 overflow-auto p-3 md:p-4'>
           {selectedStyckeId ? (
-            <div
-              className='rounded-2xl border bg-card/60 backdrop-blur-sm shadow-sm
-                         transition-all duration-200 hover:shadow-md'
-            >
-              {/* INFO: Encapsulate table view for better spacing on all screens */}
+            <div className='rounded-2xl border bg-card/60 backdrop-blur-sm shadow-sm transition-all duration-200 hover:shadow-md'>
               <div className='p-3 md:p-4'>
                 <KravTableView styckeId={selectedStyckeId} />
               </div>
             </div>
           ) : (
-            <div
-              className='h-full flex items-center justify-center text-center
-                         text-muted-foreground'
-            >
+            <div className='h-full flex items-center justify-center text-center text-muted-foreground'>
               <p className='max-w-[48ch] text-balance'>
                 Välj ett stycke till vänster för att visa dess{' '}
-                <span className='font-medium'>Krav</span>. På mobilen, tryck knäppen{' '}
-                <span className='inline-flex align-middle rounded-md border px-2 py-0.5 text-xs'>
-                  <PanelLeft className='h-3.5 w-3.5 mr-1' /> Navigation
-                </span>
-                .
+                <span className='font-medium'>Krav</span>.
               </p>
             </div>
           )}

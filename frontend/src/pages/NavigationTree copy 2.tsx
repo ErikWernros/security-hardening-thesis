@@ -117,8 +117,6 @@ const DelNode = ({
   onExpandAvsnitt: (id: number) => void;
 }) => {
   const { data: avsnittList = [] } = useAvsnittList(del.id);
-  // Use hook to keep Avsnitt list sorted by id ascending (stable & memoized)
-  const sortedAvsnittList = useSortedArray(avsnittList, 'id', 'asc');
 
   const isExpanded = expandedDelId === del.id;
 
@@ -150,7 +148,7 @@ const DelNode = ({
       </h2>
       {isExpanded && (
         <div className='pl-4 mt-1 border-l border-border/60'>
-          {sortedAvsnittList.map((avsnitt) => (
+          {avsnittList.map((avsnitt) => (
             <AvsnittNode
               key={avsnitt.id}
               avsnitt={avsnitt}
@@ -180,9 +178,6 @@ const AvsnittNode = ({
   onExpandAvsnitt: (id: number) => void;
 }) => {
   const { data: styckeList = [] } = useStyckeList(avsnitt.id);
-  // Use hook to keep Stycke list sorted by id ascending (stable & memoized)
-  const sortedStyckeList = useSortedArray(styckeList, 'id', 'asc');
-
   const isExpanded = expandedAvsnittId === avsnitt.id;
 
   return (
@@ -213,7 +208,7 @@ const AvsnittNode = ({
       </h3>
       {isExpanded && (
         <ul className='pl-4 list-disc text-sm mt-1 space-y-0.5'>
-          {sortedStyckeList.map((stycke) => (
+          {styckeList.map((stycke) => (
             <StyckeItem
               key={stycke.id}
               stycke={stycke}

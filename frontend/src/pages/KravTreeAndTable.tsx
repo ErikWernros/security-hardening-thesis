@@ -1,5 +1,5 @@
 // src/pages/KravTreeAndTable.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useDelList } from '@/hooks/useDel';
@@ -7,53 +7,159 @@ import { apiClient } from '@/lib/axios';
 import { NavigationTree } from './NavigationTree';
 import { KravTableView } from './KravTableView';
 import { KravBreadcrumbs } from './KravBreadcrumbs';
+import type { KravBreadcrumbsProps } from '@/types/domainTypes';
+import IsagLogo from '@/assets/IsagLogo.svg';
 
-// UI/Icons (keep names intact elsewhere; adding imports is allowed)
+// UI/Icons
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 import { PanelLeft } from 'lucide-react';
 
+// Tipos que ya usas para los props del breadcrumb
+
+// -------------------------------------
+// Backend shapes (strict, no 'any')
+// -------------------------------------
+interface NodeBasic {
+  id: number;
+  kod: string;
+  namn: string;
+}
+interface RawParents {
+  delId: number;
+  avsnittId: number;
+}
+
+// -------------------------------------
+// Helpers
+// -------------------------------------
+/** Resolve breadcrumb props shape from lists */
+function resolveBreadcrumbFromLists(
+  delList: NodeBasic[],
+  avsnittList: NodeBasic[],
+  styckeList: NodeBasic[],
+  ids: { delId: number; avsnittId: number; styckeId: number },
+): KravBreadcrumbsProps['styckeParents'] {
+  const del = delList.find((d) => d.id === ids.delId);
+  const avsnitt = avsnittList.find((a) => a.id === ids.avsnittId);
+  const stycke = styckeList.find((s) => s.id === ids.styckeId);
+
+  if (!del || !avsnitt || !stycke) return null;
+
+  return {
+    delKod: del.kod,
+    delNamn: del.namn,
+    avsnittKod: avsnitt.kod,
+    avsnittNamn: avsnitt.namn,
+    styckeKod: stycke.kod,
+    styckeNamn: stycke.namn,
+  };
+}
+
 export const KravTreeAndTable = () => {
   const location = useLocation();
-  const queryParams = new URLSearchParams(location.search);
+  const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const urlStyckeId = queryParams.get('styckeId');
 
+  // -------------------------------------
+  // Selected node (persisted)
+  // -------------------------------------
   const [selectedStyckeId, setSelectedStyckeId] = useState<number | null>(() => {
-    if (urlStyckeId) return parseInt(urlStyckeId);
+    if (urlStyckeId) return parseInt(urlStyckeId, 10);
     const stored = localStorage.getItem('selectedStyckeId');
-    return stored ? parseInt(stored) : null;
+    return stored ? parseInt(stored, 10) : null;
   });
 
+  // -------------------------------------
+  // Left tree root list (Del)
+  // -------------------------------------
   const { data: delList = [] } = useDelList();
 
-  const { data: styckeParents } = useQuery({
-    queryKey: ['styckeParents', selectedStyckeId],
+  // -------------------------------------
+  // Query 1: Get parents IDs for current stycke
+  // Devuelve { delId, avsnittId }
+  // -------------------------------------
+  const { data: parentsIds } = useQuery<RawParents | null>({
+    queryKey: ['styckeParentsIds', selectedStyckeId],
     queryFn: async () => {
       if (!selectedStyckeId) return null;
-      const res = await apiClient.get(`/api/stycke/${selectedStyckeId}/parents`);
-      return res.data;
+
+      const res = await apiClient.get<RawParents>(`/api/stycke/${selectedStyckeId}/parents`);
+      if (import.meta.env.DEV) {
+        console.debug('[parents raw]', res.data);
+      }
+      return res.data ?? null;
     },
     enabled: !!selectedStyckeId,
   });
 
+  // -------------------------------------
+  // Query 2: Resolve names/codes for breadcrumb using existing lists
+  // Usa /api/del, /api/avsnitt?delId, /api/stycke?avsnittId
+  // y filtra por IDs para obtener {kod, namn}
+  // -------------------------------------
+  const { data: styckeParents } = useQuery<KravBreadcrumbsProps['styckeParents']>({
+    queryKey: ['styckeParentsResolved', parentsIds?.delId, parentsIds?.avsnittId, selectedStyckeId],
+    queryFn: async () => {
+      if (!selectedStyckeId || !parentsIds?.delId || !parentsIds?.avsnittId) return null;
+
+      const delId = parentsIds.delId;
+      const avsnittId = parentsIds.avsnittId;
+
+      // Parallel calls to existing lists
+      // NOTE: if apiClient has baseURL '/api', use '/del', '/avsnitt', '/stycke'.
+      const [delListRes, avsnittListRes, styckeListRes] = await Promise.all([
+        apiClient.get<NodeBasic[]>(`/api/del`),
+        apiClient.get<NodeBasic[]>(`/api/avsnitt`, { params: { delId } }),
+        apiClient.get<NodeBasic[]>(`/api/stycke`, { params: { avsnittId } }),
+      ]);
+
+      if (import.meta.env.DEV) {
+        console.debug('[lists]', {
+          del: delListRes.data.length,
+          avsnitt: avsnittListRes.data.length,
+          stycke: styckeListRes.data.length,
+        });
+      }
+
+      const resolved = resolveBreadcrumbFromLists(
+        delListRes.data,
+        avsnittListRes.data,
+        styckeListRes.data,
+        { delId, avsnittId, styckeId: selectedStyckeId },
+      );
+
+      if (import.meta.env.DEV) {
+        console.debug('[parents resolved]', resolved);
+      }
+
+      return resolved;
+    },
+    enabled: !!selectedStyckeId && !!parentsIds?.delId && !!parentsIds?.avsnittId,
+  });
+
+  // -------------------------------------
+  // Tree expand state
+  // -------------------------------------
   const [expandedDelId, setExpandedDelId] = useState<number | null>(null);
   const [expandedAvsnittId, setExpandedAvsnittId] = useState<number | null>(null);
 
-  // New: mobile nav sheet state (responsive)
+  // -------------------------------------
+  // Mobile sheet state
+  // -------------------------------------
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
+  // Expand the correct branches when we know the parent IDs
   useEffect(() => {
-    if (styckeParents) {
-      setExpandedDelId(styckeParents.delId);
-      setExpandedAvsnittId(styckeParents.avsnittId);
-    }
-  }, [styckeParents]);
+    if (parentsIds?.delId) setExpandedDelId(parentsIds.delId);
+    if (parentsIds?.avsnittId) setExpandedAvsnittId(parentsIds.avsnittId);
+  }, [parentsIds?.delId, parentsIds?.avsnittId]);
 
+  // Handle selection from tree
   const handleSelectStycke = (id: number) => {
     setSelectedStyckeId(id);
     localStorage.setItem('selectedStyckeId', id.toString());
-    // Close mobile sheet once user selects a node
     setIsMobileNavOpen(false);
   };
 
@@ -61,7 +167,6 @@ export const KravTreeAndTable = () => {
     <div
       className='flex h-[calc(100vh-4rem)] w-full bg-gradient-to-b from-background to-muted/40
                  sm:h-[calc(100vh-6rem)]'
-      // NOTE(UX): full-height workspace below the app header
     >
       {/* Desktop Sidebar */}
       <aside
@@ -105,7 +210,7 @@ export const KravTreeAndTable = () => {
                 </SheetHeader>
                 <Separator />
                 <div className='h-[calc(100%-3.5rem)] overflow-auto p-3 md:p-4'>
-                  {/* NOTE(UX): reusing the same tree inside the sheet */}
+                  {/* Reuse the same tree inside the sheet */}
                   <NavigationTree
                     delList={delList}
                     selectedStyckeId={selectedStyckeId}
@@ -119,12 +224,9 @@ export const KravTreeAndTable = () => {
               </SheetContent>
             </Sheet>
 
-            {/* Breadcrumbs moved to its own component */}
-            <KravBreadcrumbs
-              styckeParents={styckeParents}
-              // Puedes ajustar esta altura móvil si quieres ganar espacio vertical:
-              // mobileHeightVh={72}
-            />
+            {/* Breadcrumbs: now receives real names/codes */}
+            {/* Optional: to avoid placeholders while loading, KravBreadcrumbs puede retornar null si styckeParents es null */}
+            <KravBreadcrumbs styckeParents={styckeParents ?? undefined} />
           </div>
         </div>
 
@@ -135,23 +237,19 @@ export const KravTreeAndTable = () => {
               className='rounded-2xl border bg-card/60 backdrop-blur-sm shadow-sm
                          transition-all duration-200 hover:shadow-md'
             >
-              {/* INFO: Encapsulate table view for better spacing on all screens */}
               <div className='p-3 md:p-4'>
                 <KravTableView styckeId={selectedStyckeId} />
               </div>
             </div>
           ) : (
-            <div
-              className='h-full flex items-center justify-center text-center
-                         text-muted-foreground'
-            >
-              <p className='max-w-[48ch] text-balance'>
+            <div className='h-full flex flex-col items-center justify-center text-center text-muted-foreground'>
+              {/* Imagen en la parte superior */}
+              <img src={IsagLogo} alt='Isag Logo' className='h-38 w-100' />
+
+              {/* Párrafo debajo de la imagen con un margen superior para separación */}
+              <p className='mt-4 max-w-[48ch] text-balance'>
                 Välj ett stycke till vänster för att visa dess{' '}
-                <span className='font-medium'>Krav</span>. På mobilen, tryck knäppen{' '}
-                <span className='inline-flex align-middle rounded-md border px-2 py-0.5 text-xs'>
-                  <PanelLeft className='h-3.5 w-3.5 mr-1' /> Navigation
-                </span>
-                .
+                <span className='font-medium'>Krav</span>.
               </p>
             </div>
           )}

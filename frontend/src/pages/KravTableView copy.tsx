@@ -1,3 +1,4 @@
+// src/components/KravTableView.tsx
 import { useState, useRef, useEffect } from 'react';
 import { useKravList, useKravUpdate } from '@/hooks/useKrav';
 import { useSvarSave } from '@/hooks/useSvar';
@@ -50,8 +51,15 @@ export const KravTableView = ({ styckeId }: { styckeId: number }) => {
   };
 
   return (
-    <div className='space-y-4'>
-      <div className='grid grid-cols-7 gap-4 px-4 py-2 font-semibold text-sm border-b'>
+    <>
+      {/* Sticky header for md+ screens (kept) */}
+      <div
+        className='
+          hidden md:grid grid-cols-7 gap-4 px-4 py-3 
+          font-semibold text-sm border-b
+          sticky top-0 z-10 bg-background/90 backdrop-blur
+        '
+      >
         <span>Kod</span>
         <span>Krav</span>
         <span>Anvisning</span>
@@ -60,16 +68,19 @@ export const KravTableView = ({ styckeId }: { styckeId: number }) => {
         <span>Verifikat</span>
         <span>Kommentar</span>
       </div>
-      {kravList.map((krav, rowIndex) => (
-        <KravRowEditable
-          key={krav.id}
-          krav={krav}
-          rowIndex={rowIndex}
-          inputRefs={inputRefs}
-          onEnterNext={focusNext}
-        />
-      ))}
-    </div>
+
+      <div className='space-y-3 md:space-y-0'>
+        {kravList.map((krav, rowIndex) => (
+          <KravRowEditable
+            key={krav.id}
+            krav={krav}
+            rowIndex={rowIndex}
+            inputRefs={inputRefs}
+            onEnterNext={focusNext}
+          />
+        ))}
+      </div>
+    </>
   );
 };
 
@@ -143,78 +154,126 @@ const KravRowEditable = ({
   };
 
   return (
-    <div className='grid grid-cols-7 gap-4 items-center px-4 py-2 border-b'>
-      <span className='text-sm'>{krav.kod}</span>
+    <div
+      className='
+        grid grid-cols-1 md:grid-cols-7 gap-3 md:gap-4 items-start md:items-center 
+        px-3 md:px-4 py-3 border-b last:border-b-0
+        transition-colors hover:bg-muted/40 md:hover:bg-transparent
+      '
+    >
+      {/* Kod */}
+      <div className='flex flex-col gap-1'>
+        <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
+          Kod
+        </span>
+        <span className='text-sm'>{krav.kod}</span>
+      </div>
 
       {/* kravText */}
-      <Input
-        ref={setCellRef(0)}
-        value={formState.kravText}
-        onChange={(e) => setFormState((s) => ({ ...s, kravText: e.target.value }))}
-        onBlur={handleBlur}
-        onKeyDown={(e) => handleKeyDown(e, 0)}
-        placeholder='Krav'
-      />
+      <div className='flex flex-col gap-1'>
+        <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
+          Krav
+        </span>
+        <Input
+          ref={setCellRef(0)}
+          value={formState.kravText}
+          onChange={(e) => setFormState((s) => ({ ...s, kravText: e.target.value }))}
+          onBlur={handleBlur}
+          onKeyDown={(e) => handleKeyDown(e, 0)}
+          placeholder='Krav'
+          className='h-11 md:h-9 text-sm'
+        />
+      </div>
 
       {/* anvisning */}
-      <Input
-        ref={setCellRef(1)}
-        value={formState.anvisning}
-        onChange={(e) => setFormState((s) => ({ ...s, anvisning: e.target.value }))}
-        onBlur={handleBlur}
-        onKeyDown={(e) => handleKeyDown(e, 1)}
-        placeholder='Anvisning'
-      />
+      <div className='flex flex-col gap-1'>
+        <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
+          Anvisning
+        </span>
+        <Input
+          ref={setCellRef(1)}
+          value={formState.anvisning}
+          onChange={(e) => setFormState((s) => ({ ...s, anvisning: e.target.value }))}
+          onBlur={handleBlur}
+          onKeyDown={(e) => handleKeyDown(e, 1)}
+          placeholder='Anvisning'
+          className='h-11 md:h-9 text-sm'
+        />
+      </div>
 
       {/* betyg (0-5) */}
-      <Select
-        defaultValue={formState.betyg?.toString()}
-        onValueChange={(val) => setFormState((s) => ({ ...s, betyg: parseInt(val, 10) }))}
-      >
-        <SelectTrigger
-          ref={setCellRef(2)}
-          onBlur={handleBlur}
-          onKeyDown={(e) => handleKeyDown(e, 2)}
+      <div className='flex flex-col gap-1'>
+        <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
+          Betyg
+        </span>
+        <Select
+          defaultValue={formState.betyg?.toString()}
+          onValueChange={(val) => setFormState((s) => ({ ...s, betyg: parseInt(val, 10) }))}
         >
-          <SelectValue placeholder='Betyg' />
-        </SelectTrigger>
-        <SelectContent>
-          {[0, 1, 2, 3, 4, 5].map((num) => (
-            <SelectItem key={num} value={num.toString()}>
-              {num}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+          <SelectTrigger
+            ref={setCellRef(2)}
+            onBlur={handleBlur}
+            onKeyDown={(e) => handleKeyDown(e, 2)}
+            className='h-11 md:h-9 text-sm'
+          >
+            <SelectValue placeholder='Betyg' />
+          </SelectTrigger>
+          <SelectContent>
+            {[0, 1, 2, 3, 4, 5].map((num) => (
+              <SelectItem key={num} value={num.toString()}>
+                {num}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* jaNej */}
-      <Switch
-        ref={setCellRef(3) as unknown as React.Ref<HTMLButtonElement>}
-        checked={formState.jaNej}
-        onCheckedChange={(val) => setFormState((s) => ({ ...s, jaNej: val }))}
-        onBlur={handleBlur}
-        onKeyDown={(e) => handleKeyDown(e, 3)}
-      />
+      <div className='flex flex-col gap-1'>
+        <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
+          Ja / Nej
+        </span>
+        <Switch
+          ref={setCellRef(3) as unknown as React.Ref<HTMLButtonElement>}
+          checked={formState.jaNej}
+          onCheckedChange={(val) => setFormState((s) => ({ ...s, jaNej: val }))}
+          onBlur={handleBlur}
+          onKeyDown={(e) => handleKeyDown(e, 3)}
+          className='data-[state=checked]:ring-1 data-[state=checked]:ring-primary'
+        />
+      </div>
 
       {/* verifikat */}
-      <Input
-        ref={setCellRef(4)}
-        value={formState.verifikat}
-        onChange={(e) => setFormState((s) => ({ ...s, verifikat: e.target.value }))}
-        onBlur={handleBlur}
-        onKeyDown={(e) => handleKeyDown(e, 4)}
-        placeholder='Verifikat'
-      />
+      <div className='flex flex-col gap-1'>
+        <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
+          Verifikat
+        </span>
+        <Input
+          ref={setCellRef(4)}
+          value={formState.verifikat}
+          onChange={(e) => setFormState((s) => ({ ...s, verifikat: e.target.value }))}
+          onBlur={handleBlur}
+          onKeyDown={(e) => handleKeyDown(e, 4)}
+          placeholder='Verifikat'
+          className='h-11 md:h-9 text-sm'
+        />
+      </div>
 
       {/* comentario */}
-      <Input
-        ref={setCellRef(5)}
-        value={formState.kommentar}
-        onChange={(e) => setFormState((s) => ({ ...s, kommentar: e.target.value }))}
-        onBlur={handleBlur}
-        onKeyDown={(e) => handleKeyDown(e, 5)}
-        placeholder='Comentario'
-      />
+      <div className='flex flex-col gap-1'>
+        <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
+          Kommentar
+        </span>
+        <Input
+          ref={setCellRef(5)}
+          value={formState.kommentar}
+          onChange={(e) => setFormState((s) => ({ ...s, kommentar: e.target.value }))}
+          onBlur={handleBlur}
+          onKeyDown={(e) => handleKeyDown(e, 5)}
+          placeholder='Kommentar'
+          className='h-11 md:h-9 text-sm'
+        />
+      </div>
     </div>
   );
 };

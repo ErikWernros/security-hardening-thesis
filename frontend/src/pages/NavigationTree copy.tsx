@@ -57,16 +57,31 @@ export const NavigationTree = ({
   return (
     <nav className='w-full'>
       {/* Mobile header: sticky, no toggle, tree always visible */}
-      <div className='md:hidden sticky top-0 z-20 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b'>
+      {/* NOTE: Use safe-area inset to avoid notches on modern phones */}
+      <div className='md:hidden sticky top-0 z-20 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b pt-[env(safe-area-inset-top)]'>
         <div className='flex items-center justify-between px-3 py-2'>
           <span className='text-sm font-medium'>Índice</span>
         </div>
       </div>
 
       {/* Mobile panel: always shown under header */}
-      <div className='md:hidden px-3 pb-3 pt-1'>
-        <div className='rounded-2xl border bg-card p-2 shadow-sm'>
-          <div className='max-h-[60vh] overflow-y-auto pr-1'>{tree}</div>
+      {/*
+        NOTE (mobile):
+        - We optimize vertical space and make the container height adaptive.
+        - The scroll area uses dynamic viewport units (dvh) to be more accurate on mobile browsers.
+        - We clamp the height to ~70–80vh depending on available space, accounting for the sticky header.
+      */}
+      <div className='md:hidden px-2 pb-3 pt-2'>
+        <div className='rounded-2xl border bg-card p-2.5 sm:p-3 shadow-sm'>
+          <div
+            className='
+              max-h-[min(80dvh,calc(100dvh-6rem))]
+              sm:max-h-[min(80vh,calc(100vh-10rem))]
+              overflow-y-auto pr-1 overscroll-contain
+            '
+          >
+            {tree}
+          </div>
         </div>
       </div>
 

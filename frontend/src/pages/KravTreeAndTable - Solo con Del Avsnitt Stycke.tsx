@@ -6,13 +6,13 @@ import { useDelList } from '@/hooks/useDel';
 import { apiClient } from '@/lib/axios';
 import { NavigationTree } from './NavigationTree';
 import { KravTableView } from './KravTableView';
+import { KravBreadcrumbs } from './KravBreadcrumbs';
 
 // UI/Icons (keep names intact elsewhere; adding imports is allowed)
-// -- Using shadcn/ui primitives already present in the project
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
-import { PanelLeft, ChevronRight } from 'lucide-react';
+import { PanelLeft } from 'lucide-react';
 
 export const KravTreeAndTable = () => {
   const location = useLocation();
@@ -119,26 +119,12 @@ export const KravTreeAndTable = () => {
               </SheetContent>
             </Sheet>
 
-            {/* Breadcrumbs using styckeParents when available */}
-            <nav
-              className='flex items-center gap-1 text-sm text-muted-foreground overflow-x-auto'
-              aria-label='Brödsmulor'
-            >
-              <span className='truncate max-w-[20vw] sm:max-w-[25vw] md:max-w-[30vw]'>
-                {styckeParents?.delKod ?? 'Del'}
-                {styckeParents?.delNamn ? ` – ${styckeParents.delNamn}` : ''}
-              </span>
-              <ChevronRight className='h-4 w-4 shrink-0 opacity-60' />
-              <span className='truncate max-w-[20vw] sm:max-w-[25vw] md:max-w-[30vw]'>
-                {styckeParents?.avsnittKod ?? 'Avsnitt'}
-                {styckeParents?.avsnittNamn ? ` – ${styckeParents.avsnittNamn}` : ''}
-              </span>
-              <ChevronRight className='h-4 w-4 shrink-0 opacity-60' />
-              <span className='truncate max-w-[28vw] font-medium text-foreground'>
-                {styckeParents?.styckeKod ?? 'Stycke'}
-                {styckeParents?.styckeNamn ? ` – ${styckeParents.styckeNamn}` : ''}
-              </span>
-            </nav>
+            {/* Breadcrumbs moved to its own component */}
+            <KravBreadcrumbs
+              styckeParents={styckeParents}
+              // Puedes ajustar esta altura móvil si quieres ganar espacio vertical:
+              // mobileHeightVh={72}
+            />
           </div>
         </div>
 
@@ -161,7 +147,7 @@ export const KravTreeAndTable = () => {
             >
               <p className='max-w-[48ch] text-balance'>
                 Välj ett stycke till vänster för att visa dess{' '}
-                <span className='font-medium'>Krav</span>. På mobilen, toca el botón{' '}
+                <span className='font-medium'>Krav</span>. På mobilen, tryck knäppen{' '}
                 <span className='inline-flex align-middle rounded-md border px-2 py-0.5 text-xs'>
                   <PanelLeft className='h-3.5 w-3.5 mr-1' /> Navigation
                 </span>
