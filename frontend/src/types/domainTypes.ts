@@ -1,3 +1,16 @@
+// -------------------------------------
+// Backend shapes (strict, no 'any')
+// -------------------------------------
+export interface NodeBasic {
+  id: number;
+  kod: string;
+  namn: string;
+}
+export interface RawParents {
+  delId: number;
+  avsnittId: number;
+}
+
 export interface Del {
   id: number;
   kod: string;

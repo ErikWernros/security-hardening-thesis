@@ -146,8 +146,7 @@ export const KravTreeAndTable = () => {
                - Keep prop names intact.
                - Pass a dummy value (null) so the component resuelva todo internamente.
                - Force remount on selection change to re-read localStorage and update. */}
-            {/*<KravBreadcrumbs key={selectedStyckeId ?? 'none'} styckeParents={null} />*/}
-            <KravBreadcrumbs styckeParents={null} />
+            <KravBreadcrumbs key={selectedStyckeId ?? 'none'} styckeParents={null} />
           </div>
         </div>
 
