@@ -17,17 +17,12 @@ export const useSvarSave = (kravId: number) => {
   });
 };
 
-// 🔹 Retrieve answers by Stycke (with kravId included)
-export interface SvarWithKrav extends Svar {
-  kravId: number;
-}
-
 export const useSvarIndicatorByStycke = (styckeId: number) => {
   return useQuery<Svar[]>({
     queryKey: ['svarIndicator', styckeId],
     queryFn: async () => {
       const response = await apiClient.get(`/api/svar/stycke/${styckeId}`);
-      return response.data as SvarWithKrav[];
+      return response.data;
     },
     enabled: !!styckeId,
   });

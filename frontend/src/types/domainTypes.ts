@@ -1,3 +1,4 @@
+import type React from 'react';
 // -------------------------------------
 // Backend shapes (strict, no 'any')
 // -------------------------------------
@@ -52,6 +53,26 @@ export interface SvarInput {
   jaNej: boolean | null;
   verifikat: string;
   kommentar: string;
+}
+
+export interface BrindCtx {
+  showSuccess: (message: string, timeout?: number) => void;
+  showWarning: (message: string, timeout?: number) => void;
+  showError: (message: string, timeout?: number) => void;
+}
+
+// Types aligned with your domain
+export interface CreateKravDTO {
+  styckeId: number;
+  kod: string;
+  kravText: string;
+  anvisning: string;
+}
+
+export interface BackendError {
+  code?: string;
+  field?: string;
+  message?: string;
 }
 
 export interface KravBreadcrumbsProps {

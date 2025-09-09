@@ -42,41 +42,15 @@ export const getKravList = async (req: Request, res: Response, next: NextFunctio
 export const createKrav = async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Use validatedBody for safer and stricter typing
-    const { styckeId, kod, ...rest } = req.validatedBody as CreateKravInput;
-
-    // --- Uniqueness pre-check for 'kod' ---
-    // (Prevents duplicate codes before hitting DB unique constraint)
-    const existing = await prisma.krav.findUnique({ where: { kod } });
-    if (existing) {
-      // Respond with 409 Conflict so the frontend can show a user-friendly message
-      return res.status(409).json({
-        code: 'KRAV_KOD_DUPLICATE',
-        field: 'kod',
-        message: 'Koden är redan registrerad. Ange en unik kod.',
-      });
-    }
-
+    const { styckeId, ...rest } = req.validatedBody as CreateKravInput;
     const krav = await prisma.krav.create({
       data: {
         ...rest,
-        kod,
         stycke: { connect: { id: styckeId } },
       },
     });
     return res.status(201).json(krav);
   } catch (error) {
-    // --- Race-condition safe-guard: Prisma unique violation ---
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      // If the unique index that failed includes 'kod', return a tailored 409 response
-      const targets = (error.meta?.target ?? []) as string[];
-      if (targets.includes('kod')) {
-        return res.status(409).json({
-          code: 'KRAV_KOD_DUPLICATE',
-          field: 'kod',
-          message: 'Koden är redan registrerad. Ange en unik kod.',
-        });
-      }
-    }
     return next(error);
   }
 };

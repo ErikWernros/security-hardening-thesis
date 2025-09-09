@@ -6,7 +6,7 @@ import { useDelList } from '@/hooks/useDel';
 import { apiClient } from '@/lib/axios';
 import { NavigationTree } from './NavigationTree';
 import { KravTableView } from './KravTableView';
-import { KravBreadcrumbs } from './KravBreadcrumbs';
+import { KravBreadcrumbs } from '@/components/krav/KravBreadcrumbs';
 import { type RawParents } from '@/types/domainTypes';
 import IsagLogo from '@/assets/IsagLogo.svg';
 
@@ -146,7 +146,8 @@ export const KravTreeAndTable = () => {
                - Keep prop names intact.
                - Pass a dummy value (null) so the component resuelva todo internamente.
                - Force remount on selection change to re-read localStorage and update. */}
-            <KravBreadcrumbs key={selectedStyckeId ?? 'none'} styckeParents={null} />
+            {/*<KravBreadcrumbs key={selectedStyckeId ?? 'none'} styckeParents={null} />*/}
+            <KravBreadcrumbs styckeParents={null} />
           </div>
         </div>
 

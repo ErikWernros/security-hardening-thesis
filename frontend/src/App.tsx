@@ -16,24 +16,27 @@ import { Home } from '@/pages/Home';
 import { Login } from '@/pages/Login';
 import { Dashboard } from '@/pages/Dashboard';
 import { UploadExcelPage } from './pages/UploadExcelPage';
-import { KravTreeAndTable } from './pages/KravTreeAndTable';
+import { KravTreeAndTable } from './pages/krav/KravTreeAndTable';
+import { BrindProvider } from './components/toast/useBrindToast';
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<MainLayout />}>
-        {/* Public Routes */}
-        <Route path='/' element={<Home />} />
-        <Route path='/login' element={<Login />} />
+    <BrindProvider>
+      <Routes>
+        <Route element={<MainLayout />}>
+          {/* Public Routes */}
+          <Route path='/' element={<Home />} />
+          <Route path='/login' element={<Login />} />
 
-        {/* Protected Routes */}
-        <Route element={<ProtectedRoute />}>
-          <Route path='/dashboard' element={<Dashboard />} />
-          <Route path='/upload' element={<UploadExcelPage />} />
-          <Route path='/navigationtable' element={<KravTreeAndTable />} />
-          {/* Here you can add more protected routes */}
+          {/* Protected Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route path='/dashboard' element={<Dashboard />} />
+            <Route path='/upload' element={<UploadExcelPage />} />
+            <Route path='/navigationtable' element={<KravTreeAndTable />} />
+            {/* Here you can add more protected routes */}
+          </Route>
         </Route>
-      </Route>
-    </Routes>
+      </Routes>
+    </BrindProvider>
   );
 }

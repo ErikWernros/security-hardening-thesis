@@ -63,7 +63,7 @@ export const NavigationTree = ({
       {/* NOTE: Use safe-area inset to avoid notches on modern phones */}
       <div className='md:hidden sticky top-0 z-20 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b pt-[env(safe-area-inset-top)]'>
         <div className='flex items-center justify-between px-3 py-2'>
-          <span className='text-sm font-medium'>Índice</span>
+          <span className='text-sm font-medium'>Index</span>
         </div>
       </div>
 

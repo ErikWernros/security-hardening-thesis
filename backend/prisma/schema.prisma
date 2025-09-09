@@ -16,8 +16,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 /**
@@ -98,7 +99,7 @@ model Svar {
   createdAt DateTime @default(now())
 
   kravId Int
-  krav   Krav @relation(fields: [kravId], references: [id])
+  krav   Krav @relation(fields: [kravId], references: [id], onDelete: Cascade)
 
   userId Int
   user   User @relation(fields: [userId], references: [id])
