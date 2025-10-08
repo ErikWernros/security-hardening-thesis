@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useSvarSave } from '@/hooks/useSvar';
 import { useKravUpdate } from '@/hooks/useKrav';
-import { useKravDelete } from '@/hooks/useKravMutations';
+import { useKravDelete } from '@/hooks/mutations/useKravMutations';
 import { useBrind } from '@/components/toast/useBrindToast';
 import type { Krav, Svar } from '@/types/domainTypes';
 

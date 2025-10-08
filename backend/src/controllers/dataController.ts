@@ -1,249 +1,446 @@
-/**
- * ---------------------------------------------------------
- * Project: ISAG AB
- * Developer Full Stack: Darwin Rengifo
- * Create Date: 2025-07-28
- * Design Name: dataController.ts
- * Tools: JWT, Msal, Prisma, Postgres(In Supabase),
- * Description:
- * Main controller for importing data from Excel files.
- * Defines the `importFromExcel` function, which processes the uploaded Excel file,
- * extracts the required data, and saves it to the database using Prisma.
- * It validates and structures the data before performing upsert operations.
- * Uses ExcelJS to read the Excel file and handles errors safely.
- * Works with Express and requires authentication to allow imports.
- * Includes a helper function to convert cell values to strings,
- * ensuring consistent data processing.
- * Part of the data management system for the ISAG AB project,
- * and interacts with Prisma models like `del`, `avsnitt`, `stycke`, and `krav`.
- * Should be used together with middleware that handles Excel file uploads.
- * -----------------------------------------------------------
- */
+// src/controllers/dataController.ts
 import { Request, Response, NextFunction } from 'express';
 import { Readable } from 'stream';
+import ExcelJS, {
+  CellValue,
+  CellFormulaValue,
+  CellHyperlinkValue,
+  CellRichTextValue,
+  Row,
+  Worksheet,
+} from 'exceljs';
 import prisma from '../lib/prisma';
-import ExcelJS, { CellValue } from 'exceljs';
+import { Prisma } from '@prisma/client';
 
 console.log('DataController initialized');
-// ===================================================================================
-// HELP FUNCTION: Safely convert any Excel cell to a string.
-// ===================================================================================
+
+// -------------------------------
+// Type guards
+// -------------------------------
+function isRichTextValue(v: CellValue): v is CellRichTextValue {
+  return typeof v === 'object' && v !== null && 'richText' in v;
+}
+function isFormulaValue(v: CellValue): v is CellFormulaValue {
+  return typeof v === 'object' && v !== null && 'formula' in v && 'result' in v;
+}
+function isHyperlinkValue(v: CellValue): v is CellHyperlinkValue {
+  return typeof v === 'object' && v !== null && 'text' in v && 'hyperlink' in v;
+}
+function hasStringTextProp(v: unknown): v is { text: string } {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'text' in v &&
+    typeof (v as { text?: unknown }).text === 'string'
+  );
+}
+
+// -------------------------------
+// Safe cell → string
+// -------------------------------
 function getCellStringValue(cellValue: CellValue): string {
-  console.log('Converting cell value to string:', cellValue);
-
   if (cellValue === null || cellValue === undefined) return '';
+  if (typeof cellValue === 'string') return cellValue.trim();
+  if (typeof cellValue === 'number' || typeof cellValue === 'boolean')
+    return String(cellValue).trim();
+  if (cellValue instanceof Date) return cellValue.toISOString();
 
-  if (
-    typeof cellValue === 'string' ||
-    typeof cellValue === 'number' ||
-    typeof cellValue === 'boolean'
-  ) {
-    return cellValue.toString().trim();
+  if (isRichTextValue(cellValue)) {
+    return cellValue.richText
+      .map((rt) => rt.text)
+      .join('')
+      .trim();
   }
-
-  if (cellValue instanceof Date) {
-    return cellValue.toISOString();
+  if (isFormulaValue(cellValue)) {
+    const r: CellValue | undefined = cellValue.result as CellValue | undefined;
+    if (r === null || r === undefined) return '';
+    return getCellStringValue(r);
   }
-
-  if (typeof cellValue === 'object') {
-    if ('richText' in cellValue && Array.isArray(cellValue.richText)) {
-      return cellValue.richText
-        .map((rt) => rt.text)
-        .join('')
-        .trim();
-    }
-
-    if ('result' in cellValue) {
-      const result = cellValue.result;
-      if (typeof result === 'number' || typeof result === 'string' || typeof result === 'boolean') {
-        return result.toString().trim();
-      }
-      if (result instanceof Date) {
-        return result.toISOString();
-      }
-      return '';
-    }
+  if (isHyperlinkValue(cellValue)) {
+    const text = (cellValue.text ?? '').toString().trim();
+    return text || String(cellValue.hyperlink).trim();
   }
-
+  if (hasStringTextProp(cellValue)) return cellValue.text.trim();
   return '';
 }
 
-// ===================================================================================
-// INTERFACE: Defines the data structure we expect from Excel.
-// ===================================================================================
-interface ExcelRow {
-  delKod: string;
-  delNamn: string;
-  avsnittKod: string;
-  avsnittNamn: string;
-  styckeKod: string;
-  styckeNamn: string;
-  kravKod: string;
-  kravText: string;
-  kravAnvisning: string | null;
+// -------------------------------
+// Headers (Swedish)
+// -------------------------------
+const HDR = {
+  Del: 'Del',
+  Avsnitt: 'Avsnitt',
+  Omrade: 'Område',
+  OmradeNoAccent: 'Omrade',
+  Stycke: 'Stycke',
+  Nr: 'Nr',
+  Krav: 'Krav (texten exakt)',
+  Anvisning: 'Anvisning (exakt text)',
+} as const;
+
+function buildHeaderIndex(headerRow: Row): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (let i = 1; i <= headerRow.cellCount; i += 1) {
+    const key = headerRow.getCell(i).text?.trim();
+    if (key) map[key] = i;
+  }
+  return map;
 }
 
-// ===================================================================================
-// MAIN CONTROLLER: Logic to import the file.
-// ===================================================================================
+function sheetLooksValid(
+  headerIndex: Record<string, number>
+): { ok: true } | { ok: false; missing: string[] } {
+  const omradeHeader = HDR.Omrade in headerIndex || HDR.OmradeNoAccent in headerIndex;
+  const missing: string[] = [];
+  if (!(HDR.Del in headerIndex)) missing.push(HDR.Del);
+  if (!(HDR.Avsnitt in headerIndex)) missing.push(HDR.Avsnitt);
+  if (!omradeHeader) missing.push(HDR.Omrade);
+  if (!(HDR.Stycke in headerIndex)) missing.push(HDR.Stycke);
+  if (!(HDR.Nr in headerIndex)) missing.push(HDR.Nr);
+  if (!(HDR.Krav in headerIndex)) missing.push(HDR.Krav);
+  return missing.length === 0 ? { ok: true } : { ok: false, missing };
+}
+
+// -------------------------------
+// Helpers
+// -------------------------------
+function withPrefix(prefix: string, raw: string): string {
+  const v = raw.trim();
+  return v ? `${prefix}${v}` : '';
+}
+function normalizeCodeFromCell(v: CellValue, prefix: string): string {
+  const s = getCellStringValue(v);
+  return withPrefix(prefix, s);
+}
+
+// -------------------------------
+// Row types
+// -------------------------------
+interface TitleRow {
+  depth: 1 | 2 | 3 | 4; // 1: Del, 2: Avsnitt, 3: Omrade, 4: Stycke
+  del: string; // D1
+  avsnitt?: string; // A1
+  omrade?: string; // O1
+  stycke?: string; // S1
+  namn: string; // text from "Krav (texten exakt)"
+}
+
+interface KravRow {
+  del: string;
+  avsnitt: string;
+  omrade?: string;
+  stycke?: string;
+  kravKod: string; // K..
+  kravText: string;
+  anvisning: string | null;
+}
+
+// -------------------------------
+// MAIN CONTROLLER
+// -------------------------------
 export const importFromExcel = async (req: Request, res: Response, next: NextFunction) => {
-  console.log('Archivo recibido:', req.file);
-  if (!req.file) {
-    return res.status(400).json({ message: 'Ingen Excel-fil uppladdad.' });
-  }
-
   try {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.read(Readable.from(req.file.buffer));
-    //await workbook.xlsx.load(req.file.buffer);
-
-    // Guard: no worksheets at all
-    if (!workbook.worksheets || workbook.worksheets.length === 0) {
-      return res.status(400).json({ message: 'Excel-filen är tom eller skadad.' });
+    const file: Express.Multer.File | undefined = req.file;
+    if (!file) {
+      return res.status(400).json({ message: 'Ingen Excel-fil uppladdad.' });
     }
 
-    // Validate required headers per sheet
-    const requiredHeaders = [
-      'Del-kod',
-      'Del-namn',
-      'Avsnitt-kod',
-      'Avsnitt-namn',
-      'Stycke-kod',
-      'Stycke-namn',
-      'Krav-kod',
-      'Krav-text',
-    ];
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.read(Readable.from(file.buffer));
 
-    const data: ExcelRow[] = [];
+    // Lee todas las hojas que empiezan por "ISM"
+    const worksheets: Worksheet[] = (workbook.worksheets ?? []).filter(
+      (ws) => typeof ws.name === 'string' && ws.name.startsWith('ISM')
+    );
 
-    // ---------------------------------------------------------------------------
-    // Process ALL worksheets and aggregate valid rows
-    // ---------------------------------------------------------------------------
-    for (const worksheet of workbook.worksheets) {
-      if (!worksheet) continue;
+    if (worksheets.length === 0) {
+      return res.status(400).json({ message: 'Excel-filen saknar blad som börjar med "ISM".' });
+    }
 
+    const titles: TitleRow[] = [];
+    const kravs: KravRow[] = [];
+
+    for (const worksheet of worksheets) {
       const headerRow = worksheet.getRow(1);
-      const headers = (headerRow.values as string[]).reduce(
-        (acc, val, idx) => {
-          if (val) acc[val.trim()] = idx;
-          return acc;
-        },
-        {} as Record<string, number>
-      );
+      if (!headerRow || headerRow.cellCount === 0) continue;
 
-      const missing = requiredHeaders.filter((h) => !headers[h]);
-      if (missing.length > 0) {
+      const headerIndex = buildHeaderIndex(headerRow);
+      const ok = sheetLooksValid(headerIndex);
+      if (!ok.ok) {
         console.warn(
-          `Saltando hoja "${worksheet.name}" por faltar columnas: ${missing.join(', ')}`
+          `Saltando hoja "${worksheet.name}" por columnas faltantes: ${ok.missing.join(', ')}`
         );
         continue;
       }
 
-      // Optional column index (may not exist on some sheets)
-      const kravAnvisningIndex = headers['Krav-anvisning'];
+      const omradeIdx = headerIndex[HDR.Omrade] ?? headerIndex[HDR.OmradeNoAccent];
+      const delIdx = headerIndex[HDR.Del];
+      const avsnittIdx = headerIndex[HDR.Avsnitt];
+      const styckeIdx = headerIndex[HDR.Stycke];
+      const nrIdx = headerIndex[HDR.Nr];
+      const kravIdx = headerIndex[HDR.Krav];
+      const anvisningIdx = headerIndex[HDR.Anvisning];
 
-      worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // skip header
+      for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+        const row = worksheet.getRow(rowNumber);
 
-        const rowData: ExcelRow = {
-          delKod: getCellStringValue(row.getCell(headers['Del-kod']).value),
-          delNamn: getCellStringValue(row.getCell(headers['Del-namn']).value),
-          avsnittKod: getCellStringValue(row.getCell(headers['Avsnitt-kod']).value),
-          avsnittNamn: getCellStringValue(row.getCell(headers['Avsnitt-namn']).value),
-          styckeKod: getCellStringValue(row.getCell(headers['Stycke-kod']).value),
-          styckeNamn: getCellStringValue(row.getCell(headers['Stycke-namn']).value),
-          kravKod: getCellStringValue(row.getCell(headers['Krav-kod']).value),
-          kravText: getCellStringValue(row.getCell(headers['Krav-text']).value),
-          kravAnvisning: kravAnvisningIndex
-            ? getCellStringValue(row.getCell(kravAnvisningIndex).value) || null
-            : null,
-        };
+        const del = normalizeCodeFromCell(row.getCell(delIdx).value, 'D');
+        const avsnitt = normalizeCodeFromCell(row.getCell(avsnittIdx).value, 'A');
+        const omrade = normalizeCodeFromCell(row.getCell(omradeIdx).value, 'O');
+        const stycke = normalizeCodeFromCell(row.getCell(styckeIdx).value, 'S');
+        const kravKod = normalizeCodeFromCell(row.getCell(nrIdx).value, 'K');
 
-        const requiredValues = [
-          rowData.delKod,
-          rowData.avsnittKod,
-          rowData.styckeKod,
-          rowData.kravKod,
-        ];
+        const kravText = getCellStringValue(row.getCell(kravIdx).value);
+        const anvisning =
+          typeof anvisningIdx === 'number'
+            ? (() => {
+                const v = getCellStringValue(row.getCell(anvisningIdx).value);
+                return v.length > 0 ? v : null;
+              })()
+            : null;
 
-        if (requiredValues.every((val) => val)) {
-          data.push(rowData);
+        if (!kravText) continue;
+
+        // TÍTULOS (sin Nr)
+        if (!kravKod) {
+          if (del && !avsnitt && !omrade && !stycke) {
+            titles.push({ depth: 1, del, namn: kravText }); // Del
+          } else if (del && avsnitt && !omrade && !stycke) {
+            titles.push({ depth: 2, del, avsnitt, namn: kravText }); // Avsnitt
+          } else if (del && avsnitt && omrade && !stycke) {
+            titles.push({ depth: 3, del, avsnitt, omrade, namn: kravText }); // Område
+          } else if (del && avsnitt && omrade && stycke) {
+            titles.push({ depth: 4, del, avsnitt, omrade, stycke, namn: kravText }); // Stycke
+          }
+          continue;
+        }
+
+        // KRAV (con Nr)
+        if (del && avsnitt) {
+          kravs.push({
+            del,
+            avsnitt,
+            omrade: omrade || undefined,
+            stycke: stycke || undefined,
+            kravKod,
+            kravText,
+            anvisning,
+          });
+        }
+      }
+    }
+
+    if (titles.length === 0 && kravs.length === 0) {
+      return res.status(400).json({
+        message:
+          'Ingen giltig data hittades i bladen "ISM". Verifiera que Del, Avsnitt, Område, Stycke, Nr och Krav är ifyllda.',
+      });
+    }
+
+    // -------------------------------
+    // Persistencia
+    // -------------------------------
+
+    // Ordenar títulos por profundidad 1→4
+    titles.sort((a, b) => a.depth - b.depth);
+
+    // Conteos
+    const delSet = new Set<string>();
+    const avsnittSet = new Set<string>();
+    const omradeSet = new Set<string>();
+    const styckeSet = new Set<string>();
+    const kravSet = new Set<string>();
+
+    // 1) Guardar TÍTULOS
+    for (const t of titles) {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        if (t.depth === 1) {
+          await tx.del.upsert({
+            where: { kod: t.del }, // Del.kod es único global
+            update: { namn: t.namn },
+            create: { kod: t.del, namn: t.namn },
+          });
+          delSet.add(t.del);
+          return;
+        }
+
+        // Asegurar Del (parent) con placeholder
+        const del = await tx.del.upsert({
+          where: { kod: t.del },
+          update: {},
+          create: { kod: t.del, namn: t.del },
+          select: { id: true },
+        });
+        delSet.add(t.del);
+
+        if (t.depth === 2 && t.avsnitt) {
+          await tx.avsnitt.upsert({
+            where: { kod_delId: { kod: t.avsnitt, delId: del.id } },
+            update: { namn: t.namn },
+            create: { kod: t.avsnitt, namn: t.namn, delId: del.id },
+          });
+          avsnittSet.add(t.avsnitt);
+          return;
+        }
+
+        if (!t.avsnitt) return;
+
+        // Asegurar Avsnitt (parent) con placeholder
+        const avsnitt = await tx.avsnitt.upsert({
+          where: { kod_delId: { kod: t.avsnitt, delId: del.id } },
+          update: {},
+          create: { kod: t.avsnitt, namn: t.avsnitt, delId: del.id },
+          select: { id: true },
+        });
+        avsnittSet.add(t.avsnitt);
+
+        if (t.depth === 3 && t.omrade) {
+          await tx.omrade.upsert({
+            where: { kod_avsnittId: { kod: t.omrade, avsnittId: avsnitt.id } },
+            update: { namn: t.namn },
+            create: { kod: t.omrade, namn: t.namn, avsnittId: avsnitt.id },
+          });
+          omradeSet.add(t.omrade);
+          return;
+        }
+
+        if (t.depth === 4 && t.omrade && t.stycke) {
+          // Asegurar Område (parent) con placeholder
+          const omr = await tx.omrade.upsert({
+            where: { kod_avsnittId: { kod: t.omrade, avsnittId: avsnitt.id } },
+            update: {},
+            create: { kod: t.omrade, namn: t.omrade, avsnittId: avsnitt.id },
+            select: { id: true },
+          });
+          omradeSet.add(t.omrade);
+
+          await tx.stycke.upsert({
+            where: { kod_omradeId: { kod: t.stycke, omradeId: omr.id } },
+            update: { namn: t.namn },
+            create: { kod: t.stycke, namn: t.namn, omradeId: omr.id },
+          });
+          styckeSet.add(t.stycke);
         }
       });
     }
 
-    if (data.length === 0) {
-      return res.status(400).json({
-        message:
-          'Excel-filen saknar nödvändiga kolumner eller inte finns data válida i de tillgängliga bladen.',
-      });
-    }
-
-    // ---------------------------------------------------------------------------
-    // Write to DB using SHORT-LIVED transactions per row (prevents Prisma P2028)
-    // ---------------------------------------------------------------------------
-    // NOTE: We keep your upsert logic and names; only the transaction boundary changes.
+    // 2) Guardar KRAV (3 rutas con where compuesto)
     let processed = 0;
+    for (const r of kravs) {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        // Parents con placeholders si no existen
+        const del = await tx.del.upsert({
+          where: { kod: r.del },
+          update: {},
+          create: { kod: r.del, namn: r.del },
+          select: { id: true },
+        });
+        delSet.add(r.del);
 
-    for (const row of data) {
-      await prisma.$transaction(
-        async (tx) => {
-          const del = await tx.del.upsert({
-            where: { kod: row.delKod },
-            update: { namn: row.delNamn },
-            create: { kod: row.delKod, namn: row.delNamn },
+        const avsnitt = await tx.avsnitt.upsert({
+          where: { kod_delId: { kod: r.avsnitt, delId: del.id } },
+          update: {},
+          create: { kod: r.avsnitt, namn: r.avsnitt, delId: del.id },
+          select: { id: true },
+        });
+        avsnittSet.add(r.avsnitt);
+
+        let omradeId: number | null = null;
+        if (r.omrade) {
+          const omr = await tx.omrade.upsert({
+            where: { kod_avsnittId: { kod: r.omrade, avsnittId: avsnitt.id } },
+            update: {},
+            create: { kod: r.omrade, namn: r.omrade, avsnittId: avsnitt.id },
+            select: { id: true },
           });
+          omradeId = omr.id;
+          omradeSet.add(r.omrade);
+        }
 
-          const avsnitt = await tx.avsnitt.upsert({
-            where: { kod_delId: { kod: row.avsnittKod, delId: del.id } },
-            update: { namn: row.avsnittNamn },
+        let styckeId: number | null = null;
+        if (r.stycke && omradeId) {
+          const sty = await tx.stycke.upsert({
+            where: { kod_omradeId: { kod: r.stycke, omradeId } },
+            update: {},
+            create: { kod: r.stycke, namn: r.stycke, omradeId },
+            select: { id: true },
+          });
+          styckeId = sty.id;
+          styckeSet.add(r.stycke);
+        }
+
+        // KRAV por alcance (scope):
+        if (styckeId) {
+          // Ruta 3: Avsnitt → Område → Stycke → Krav
+          await tx.krav.upsert({
+            where: { styckeId_kod: { styckeId, kod: r.kravKod } },
+            update: {
+              kravText: r.kravText,
+              anvisning: r.anvisning,
+              // normalizamos las otras FK a null para no dejar dobles enlaces
+              omradeId: null,
+              avsnittId: null,
+            },
             create: {
-              kod: row.avsnittKod,
-              namn: row.avsnittNamn,
-              delId: del.id,
+              kod: r.kravKod,
+              kravText: r.kravText,
+              anvisning: r.anvisning,
+              styckeId,
             },
           });
-
-          const stycke = await tx.stycke.upsert({
-            where: { kod_avsnittId: { kod: row.styckeKod, avsnittId: avsnitt.id } },
-            update: { namn: row.styckeNamn },
+        } else if (omradeId) {
+          // Ruta 2: Avsnitt → Område → Krav
+          await tx.krav.upsert({
+            where: { omradeId_kod: { omradeId, kod: r.kravKod } },
+            update: {
+              kravText: r.kravText,
+              anvisning: r.anvisning,
+              styckeId: null,
+              avsnittId: null,
+            },
             create: {
-              kod: row.styckeKod,
-              namn: row.styckeNamn,
+              kod: r.kravKod,
+              kravText: r.kravText,
+              anvisning: r.anvisning,
+              omradeId,
+            },
+          });
+        } else {
+          // Ruta 1: Avsnitt → Krav
+          await tx.krav.upsert({
+            where: { avsnittId_kod: { avsnittId: avsnitt.id, kod: r.kravKod } },
+            update: {
+              kravText: r.kravText,
+              anvisning: r.anvisning,
+              styckeId: null,
+              omradeId: null,
+            },
+            create: {
+              kod: r.kravKod,
+              kravText: r.kravText,
+              anvisning: r.anvisning,
               avsnittId: avsnitt.id,
             },
           });
+        }
 
-          await tx.krav.upsert({
-            where: { kod: row.kravKod },
-            update: {
-              kravText: row.kravText,
-              anvisning: row.kravAnvisning,
-            },
-            create: {
-              kod: row.kravKod,
-              kravText: row.kravText,
-              anvisning: row.kravAnvisning,
-              styckeId: stycke.id,
-            },
-          });
-        },
-        { timeout: 60000 } // optional: extend a bit for heavy rows
-      );
+        kravSet.add(r.kravKod);
+      });
 
       processed += 1;
       if (processed % 500 === 0) {
-        console.log(`Processed ${processed} rows...`);
+        console.log(`Processed ${processed} krav rows...`);
       }
     }
 
     res.status(201).json({
       message: 'Import avslutad.',
-      antalRader: data.length,
-      antalDelar: new Set(data.map((d) => d.delKod)).size,
-      antalAvsnitt: new Set(data.map((d) => d.avsnittKod)).size,
-      antalStycken: new Set(data.map((d) => d.styckeKod)).size,
-      antalKrav: new Set(data.map((d) => d.kravKod)).size,
+      antalTitlar: titles.length,
+      antalKrav: kravSet.size,
+      antalDelar: delSet.size,
+      antalAvsnitt: avsnittSet.size,
+      antalOmraden: omradeSet.size,
+      antalStycken: styckeSet.size,
     });
   } catch (error) {
     console.error('Misslyckades med att importera data från Excel:', error);

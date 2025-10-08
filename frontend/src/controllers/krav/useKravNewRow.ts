@@ -1,13 +1,16 @@
-// src/controllers/useKravNewRow.ts
+// src/controllers/krav/useKravNewRow.ts
 import { useRef, useState } from 'react';
 import axios, { type AxiosError } from 'axios';
-import { useKravCreate } from '@/hooks/useKravMutations';
+import { useKravCreate } from '@/hooks/mutations/useKravMutations';
 import { useBrind } from '@/components/toast/useBrindToast';
 import type { BackendError } from '@/types/domainTypes';
+import type { KravListFilter } from '@/hooks/useKrav';
 
-//type BackendError = { code?: string; field?: string; message?: string };
-
-export const useKravNewRow = (styckeId: number, onCancel: () => void, onSaved?: () => void) => {
+export const useKravNewRow = (
+  scope: KravListFilter, // 👈 ahora acepta scope genérico
+  onCancel: () => void,
+  onSaved?: () => void,
+) => {
   const [kod, setKod] = useState<string>('');
   const [kravText, setKravText] = useState<string>('');
   const [anvisning, setAnvisning] = useState<string>('');
@@ -19,7 +22,7 @@ export const useKravNewRow = (styckeId: number, onCancel: () => void, onSaved?: 
   };
 
   const kodRef = useRef<HTMLInputElement | null>(null);
-  const create = useKravCreate(styckeId);
+  const create = useKravCreate(scope); // 👈 pasa el scope genérico
   const { showError, showSuccess, showWarning } = useBrind();
 
   const focusNext = (col: number) => {
@@ -49,7 +52,6 @@ export const useKravNewRow = (styckeId: number, onCancel: () => void, onSaved?: 
       !e.metaKey;
 
     if (!isPlainEnter) return;
-
     e.preventDefault();
     if (col === inputRefs.current.length - 1) {
       void onSave();

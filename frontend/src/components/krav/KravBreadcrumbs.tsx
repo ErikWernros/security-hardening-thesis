@@ -1,194 +1,105 @@
-// src/pages/KravBreadcrumbs.tsx
 import * as React from 'react';
-import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { memo, useRef } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { apiClient } from '@/lib/axios';
-import { type KravBreadcrumbsProps, type NodeBasic, type RawParents } from '@/types/domainTypes';
+import { type KravBreadcrumbsProps, type RawParents } from '@/types/domainTypes';
+import type { KravListFilter } from '@/hooks/useKrav';
+import { useKravBreadcrumbSegments } from '@/hooks/kravbreadcrumbs/useBreadcrumbs';
 
-/** Resolve breadcrumb props shape from lists */
-function resolveBreadcrumbFromLists(
-  delList: NodeBasic[],
-  avsnittList: NodeBasic[],
-  styckeList: NodeBasic[],
-  ids: { delId: number; avsnittId: number; styckeId: number },
-): KravBreadcrumbsProps['styckeParents'] {
-  const del = delList.find((d) => d.id === ids.delId);
-  const avsnitt = avsnittList.find((a) => a.id === ids.avsnittId);
-  const stycke = styckeList.find((s) => s.id === ids.styckeId);
-  if (!del || !avsnitt || !stycke) return null;
-  return {
-    delKod: del.kod,
-    delNamn: del.namn,
-    avsnittKod: avsnitt.kod,
-    avsnittNamn: avsnitt.namn,
-    styckeKod: stycke.kod,
-    styckeNamn: stycke.namn,
-  };
-}
+type Segment = { label: string };
 
-/** Read styckeId from URL or localStorage (URL has priority) */
-function getSelectedStyckeId(locationSearch: string): number | null {
-  const urlStyckeId = new URLSearchParams(locationSearch).get('styckeId');
-  if (urlStyckeId) return parseInt(urlStyckeId, 10);
-  const stored = localStorage.getItem('selectedStyckeId');
-  return stored ? parseInt(stored, 10) : null;
-}
+type Props = KravBreadcrumbsProps & {
+  /** Current scope (Section | Area | Paragraph) — comes from RequirementsTreeAndTable */
+  scope: KravListFilter | null;
+  /** optional hint to speed up the stycke case */
+  styckeParents?: RawParents | null;
+};
 
-export const KravBreadcrumbs: React.FC<KravBreadcrumbsProps> = ({
-  styckeParents,
-  mobileHeightVh,
-}) => {
-  // Inline style only on mobile when provided.
-  const mobileStyle =
-    typeof mobileHeightVh === 'number' ? { height: `${mobileHeightVh}vh` } : undefined;
+/**
+ * Module-level GLOBAL cache: survives remounts caused by `key={crumbsKey}`.
+ * Avoids the "empty frame" by displaying the last valid breadcrumb immediately,
+ * until the hook delivers the segments for the new scope.
+ */
+let __KRAV_BC_LAST_SEGMENTS__: Segment[] = [];
 
-  const location = useLocation();
-
-  // ------------------------------------------------------------
-  // FIX CORE: Track selectedStyckeId without remounts or parent props
-  // - Poll localStorage lightly (150ms) because 'storage' does not fire in same tab.
-  // - Also react when URL param changes.
-  // - This avoids using <KravBreadcrumbs key=.../> and prevents flicker.
-  // ------------------------------------------------------------
-  const [selectedStyckeId, setSelectedStyckeId] = useState<number | null>(() =>
-    getSelectedStyckeId(location.search),
+/**
+ * KravBreadcrumbs
+ * - Mobile: vertical list (one line per segment)
+ * - Desktop: horizontal with chevrons, with truncation and title
+ * - Anti-flicker: use global fallback on the first frame after remount
+ */
+export const KravBreadcrumbs = memo(({ mobileHeightVh, scope, styckeParents }: Props) => {
+  // Keep last stable local value, initialized from the global cache (survives remount)
+  const lastNonEmpty = useRef<Segment[]>(
+    Array.isArray(__KRAV_BC_LAST_SEGMENTS__) ? __KRAV_BC_LAST_SEGMENTS__ : [],
   );
 
-  useEffect(() => {
-    // Immediate sync when URL changes
-    setSelectedStyckeId(getSelectedStyckeId(location.search));
+  const segmentsFromHook =
+    useKravBreadcrumbSegments(scope, { styckeParentsHint: styckeParents ?? undefined }) ?? null;
 
-    // Lightweight polling to detect local updates from same tab
-    let last = getSelectedStyckeId(location.search);
-    const tick = () => {
-      const curr = getSelectedStyckeId(location.search);
-      if (curr !== last) {
-        last = curr;
-        setSelectedStyckeId(curr);
-      }
-    };
-    const id = window.setInterval(tick, 150);
+  // We prefer hook segments if they exist; otherwise, we use the latest stable one (local/global)
+  const segments: Segment[] =
+    Array.isArray(segmentsFromHook) && segmentsFromHook.length > 0
+      ? segmentsFromHook
+      : lastNonEmpty.current;
 
-    // Listen storage for multi-tab changes (won't fire on same tab, but it is cheap)
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'selectedStyckeId') tick();
-    };
-    window.addEventListener('storage', onStorage);
+  // When new segments arrive, we update the local ref and the global cache
+  if (Array.isArray(segmentsFromHook) && segmentsFromHook.length > 0) {
+    lastNonEmpty.current = segmentsFromHook;
+    __KRAV_BC_LAST_SEGMENTS__ = segmentsFromHook;
+  }
 
-    return () => {
-      window.clearInterval(id);
-      window.removeEventListener('storage', onStorage);
-    };
-  }, [location.search]);
+  // If there were never any segments (first render of the entire app), we don't render anything
+  if (segments.length === 0) return null;
 
-  // ------------------------------------------------------------
-  // Query 1: parent ids for current stycke (keep previous while fetching)
-  // ------------------------------------------------------------
-  const { data: parentsIds } = useQuery<RawParents | null>({
-    queryKey: ['styckeParentsIds', selectedStyckeId],
-    queryFn: async () => {
-      if (!selectedStyckeId) return null;
-      const res = await apiClient.get<RawParents>(`/api/stycke/${selectedStyckeId}/parents`);
-      return res.data ?? null;
-    },
-    enabled: !!selectedStyckeId && !styckeParents,
-    // Keep previous data during key change to avoid any visual jump.
-    placeholderData: (prev) => prev,
-  });
-
-  // ------------------------------------------------------------
-  // Query 2: resolve codes/names (also keep previous while fetching)
-  // ------------------------------------------------------------
-  const { data: resolvedParents } = useQuery<KravBreadcrumbsProps['styckeParents']>({
-    queryKey: ['styckeParentsResolved', parentsIds?.delId, parentsIds?.avsnittId, selectedStyckeId],
-    queryFn: async () => {
-      if (!selectedStyckeId || !parentsIds?.delId || !parentsIds?.avsnittId) return null;
-
-      const delId = parentsIds.delId;
-      const avsnittId = parentsIds.avsnittId;
-
-      const [delListRes, avsnittListRes, styckeListRes] = await Promise.all([
-        apiClient.get<NodeBasic[]>(`/api/del`),
-        apiClient.get<NodeBasic[]>(`/api/avsnitt`, { params: { delId } }),
-        apiClient.get<NodeBasic[]>(`/api/stycke`, { params: { avsnittId } }),
-      ]);
-
-      return resolveBreadcrumbFromLists(delListRes.data, avsnittListRes.data, styckeListRes.data, {
-        delId,
-        avsnittId,
-        styckeId: selectedStyckeId,
-      });
-    },
-    enabled: !!selectedStyckeId && !!parentsIds?.delId && !!parentsIds?.avsnittId && !styckeParents,
-    placeholderData: (prev) => prev,
-  });
-
-  // Prefer explicit props if provided; otherwise use resolved data
-  const effectiveParents = styckeParents ?? resolvedParents ?? null;
-
-  // If no selection yet, render nothing (no placeholders → no flicker).
-  if (!selectedStyckeId || !effectiveParents) return null;
+  const mobileStyle =
+    typeof mobileHeightVh === 'number' ? { height: `${mobileHeightVh}vh` } : undefined;
 
   return (
     <nav
       aria-label='Brödsmulor'
-      className='
-        flex text-sm text-muted-foreground
-        px-2 py-1 leading-tight
-        sm:px-3 sm:py-1.5
-        md:px-4 md:py-2
-      '
+      className='flex text-sm text-muted-foreground px-2 py-1 leading-tight sm:px-3 sm:py-1.5 md:px-4 md:py-2'
       style={mobileStyle}
     >
-      {/* Mobile-first: vertical stack (wrap text, keep chevron at end of line) */}
+      {/* Mobile: one line per segment */}
       <div className='sm:hidden flex flex-col gap-1 w-full'>
-        {/* Line 1: Del */}
-        <div className='flex items-start gap-1'>
-          <span className='min-w-0 whitespace-normal break-words'>
-            {/* Show full text, never truncate */}
-            {effectiveParents?.delKod ?? 'Del'}
-            {effectiveParents?.delNamn ? ` – ${effectiveParents.delNamn}` : ''}
-          </span>
-          <ChevronRight className='h-4 w-4 shrink-0 opacity-60 mt-0.5' />
-        </div>
-
-        {/* Line 2: Avsnitt */}
-        <div className='flex items-start gap-1'>
-          <span className='min-w-0 whitespace-normal break-words'>
-            {effectiveParents?.avsnittKod ?? 'Avsnitt'}
-            {effectiveParents?.avsnittNamn ? ` – ${effectiveParents.avsnittNamn}` : ''}
-          </span>
-          <ChevronRight className='h-4 w-4 shrink-0 opacity-60 mt-0.5' />
-        </div>
-
-        {/* Line 3: Stycke (no chevron) */}
-        <div className='flex items-start'>
-          <span className='min-w-0 whitespace-normal break-words font-medium text-foreground'>
-            {effectiveParents?.styckeKod ?? 'Stycke'}
-            {effectiveParents?.styckeNamn ? ` – ${effectiveParents.styckeNamn}` : ''}
-          </span>
-        </div>
+        {segments.map((seg, idx) => (
+          <div key={`${seg.label}-${idx}`} className='flex items-start gap-1'>
+            <span className={idx === segments.length - 1 ? 'font-medium text-foreground' : ''}>
+              {seg.label}
+            </span>
+            {idx < segments.length - 1 ? (
+              <ChevronRight className='h-4 w-4 shrink-0 opacity-60 mt-0.5' />
+            ) : null}
+          </div>
+        ))}
       </div>
 
-      {/* ≥ sm: keep the original horizontal breadcrumb with truncation */}
+      {/* Desktop: horizontal with chevrons and truncated */}
       <div className='hidden sm:flex items-center gap-1 overflow-x-auto w-full'>
-        <span className='truncate max-w-[40vw] sm:max-w-[30vw] md:max-w-[30vw]'>
-          {effectiveParents?.delKod ?? 'Del'}
-          {effectiveParents?.delNamn ? ` – ${effectiveParents.delNamn}` : ''}
-        </span>
-        <ChevronRight className='h-4 w-4 shrink-0 opacity-60' />
-        <span className='truncate max-w-[40vw] sm:max-w-[30vw] md:max-w-[30vw]'>
-          {effectiveParents?.avsnittKod ?? 'Avsnitt'}
-          {effectiveParents?.avsnittNamn ? ` – ${effectiveParents.avsnittNamn}` : ''}
-        </span>
-        <ChevronRight className='h-4 w-4 shrink-0 opacity-60' />
-        <span className='truncate max-w-[48vw] sm:max-w-[40vw] md:max-w-[28vw] font-medium text-foreground'>
-          {effectiveParents?.styckeKod ?? 'Stycke'}
-          {effectiveParents?.styckeNamn ? ` – ${effectiveParents.styckeNamn}` : ''}
-        </span>
+        {segments.map((seg, idx) => (
+          <React.Fragment key={`${seg.label}-${idx}`}>
+            <span
+              className={[
+                'truncate',
+                idx === segments.length - 1 ? 'font-medium text-foreground' : '',
+                idx === 0
+                  ? 'max-w-[15vw] sm:max-w-[10vw] md:max-w-[10vw]'
+                  : 'max-w-[20vw] sm:max-w-[15vw] md:max-w-[15vw]',
+              ].join(' ')}
+              title={seg.label}
+            >
+              {seg.label}
+            </span>
+            {idx < segments.length - 1 ? (
+              <ChevronRight className='h-4 w-4 shrink-0 opacity-60' />
+            ) : null}
+          </React.Fragment>
+        ))}
       </div>
     </nav>
   );
-};
+});
+
+KravBreadcrumbs.displayName = 'KravBreadcrumbs';
+
+export default KravBreadcrumbs;

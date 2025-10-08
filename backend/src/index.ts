@@ -16,7 +16,7 @@
  * -----------------------------------------------------------
  */
 // Import types and the global declaration file
-import './types';
+import './types/types';
 
 import express from 'express';
 import dotenv from 'dotenv';

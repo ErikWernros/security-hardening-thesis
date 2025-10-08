@@ -1,4 +1,3 @@
-import type React from 'react';
 // -------------------------------------
 // Backend shapes (strict, no 'any')
 // -------------------------------------
@@ -10,6 +9,7 @@ export interface NodeBasic {
 export interface RawParents {
   delId: number;
   avsnittId: number;
+  omradeId: number;
 }
 
 export interface Del {
@@ -25,11 +25,18 @@ export interface Avsnitt {
   delId: number;
 }
 
-export interface Stycke {
+export interface Omrade {
   id: number;
   kod: string;
   namn: string;
   avsnittId: number;
+}
+
+export interface Stycke {
+  id: number;
+  kod: string;
+  namn: string;
+  omradeId: number;
 }
 
 export interface Krav {

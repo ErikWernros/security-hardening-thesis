@@ -1,4 +1,4 @@
-// src/components/KravTableView.tsx
+// src/pages/krav/KravTableView.tsx
 import { type Krav, type Svar } from '@/types/domainTypes';
 import {
   Select,
@@ -11,25 +11,58 @@ import { Switch } from '@/components/ui/switch';
 import { AmplifiedInput } from '@/components/inputs/AmplifiedInput';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Save, Trash2, XCircle, SquareCheckBig } from 'lucide-react';
+import { useMemo } from 'react';
+
 import { useKravTableView } from '@/controllers/krav/useKravTableView';
 import { useKravNewRow } from '@/controllers/krav/useKravNewRow';
 import { useKravRow } from '@/controllers/krav/useKravRow';
 
-type CellRef = HTMLInputElement | HTMLButtonElement | null;
+import type { KravListFilter } from '@/hooks/useKrav';
 
-export const KravTableView = ({ styckeId }: { styckeId: number }) => {
+type CellRef = HTMLInputElement | HTMLButtonElement | null;
+type Props = { styckeId: number } | { scope?: KravListFilter };
+
+// Campos de scope válidos
+type ScopeKey = 'styckeId' | 'avsnittId' | 'omradeId';
+
+export const KravTableView = (props: Props) => {
+  // 🔒 Memo del filtro efectivo (evita nuevas referencias para la queryKey)
+  const effectiveFilter: KravListFilter = useMemo(() => {
+    return 'scope' in props && props.scope != null
+      ? props.scope
+      : { styckeId: (props as { styckeId: number }).styckeId };
+  }, [props]);
+
   const { kravList, svarMap, inputRefs, isCreating, setIsCreating, focusNext, onClickNewRow } =
-    useKravTableView(styckeId);
+    useKravTableView(effectiveFilter);
+
+  // ───────────────────────────────────────────────────────────
+  // Detección de scope actual
+  // ───────────────────────────────────────────────────────────
+  const scopeKey: ScopeKey | null = useMemo(() => {
+    if (typeof effectiveFilter.styckeId === 'number') return 'styckeId';
+    if (typeof effectiveFilter.avsnittId === 'number') return 'avsnittId';
+    if (typeof effectiveFilter.omradeId === 'number') return 'omradeId';
+    return null;
+  }, [effectiveFilter]);
+
+  const scopeValue: number | undefined =
+    scopeKey != null ? (effectiveFilter as Record<string, number>)[scopeKey] : undefined;
+
+  // ✅ Ahora se permite crear en cualquier scope válido (stycke/avsnitt/omrade),
+  //    independientemente de si existen "kravs directos" actualmente.
+  const canCreate = Boolean(scopeKey && scopeValue != null);
 
   return (
     <>
-      {/* 🔹 Action Bar (Mobile Only / Ny rad) */}
-      <div className='flex justify-end px-4 py-2 md:hidden'>
+      {/* Action Bar (solo visible en mobile en tu layout actual) */}
+      <div className='flex justify-end px-4 py-2 md:py-3 md:hidden'>
         <Button
           type='button'
           variant='outline'
-          onClick={onClickNewRow}
-          className='gap-2 transition-colors bg-primary text-primary-foreground border-primary'
+          onClick={() => canCreate && onClickNewRow()}
+          disabled={!canCreate}
+          className='gap-2 transition-colors bg-primary text-primary-foreground border-primary md:bg-transparent md:text-foreground md:hover:bg-primary md:hover:text-primary-foreground disabled:opacity-50'
           title='Ny rad'
         >
           <PlusCircle className='h-4 w-4 md:mr-1' />
@@ -37,7 +70,7 @@ export const KravTableView = ({ styckeId }: { styckeId: number }) => {
         </Button>
       </div>
 
-      {/* Sticky header */}
+      {/* Header */}
       <div className='hidden md:grid grid-cols-8 gap-4 px-4 py-3 font-semibold text-sm border-b sticky top-0 z-10 bg-background/90 backdrop-blur'>
         <span>Kod</span>
         <span>Krav</span>
@@ -46,14 +79,13 @@ export const KravTableView = ({ styckeId }: { styckeId: number }) => {
         <span>Ja / Nej</span>
         <span>Verifikat</span>
         <span>Kommentar</span>
-
-        {/* Columna de acciones: aquí va Ny rad en desktop */}
         <div className='flex justify-end'>
           <Button
             type='button'
             variant='outline'
-            onClick={onClickNewRow}
-            className='gap-2 transition-colors md:bg-transparent md:text-foreground md:hover:bg-primary md:hover:text-primary-foreground'
+            onClick={() => canCreate && onClickNewRow()}
+            disabled={!canCreate}
+            className='gap-2 transition-colors md:bg-transparent md:text-foreground md:hover:bg-primary md:hover:text-primary-foreground disabled:opacity-50'
             title='Ny rad'
           >
             <PlusCircle className='h-4 w-4' />
@@ -62,15 +94,16 @@ export const KravTableView = ({ styckeId }: { styckeId: number }) => {
         </div>
       </div>
 
-      {/* 🔹 Create row inline */}
-      {isCreating && (
+      {/* Nueva fila */}
+      {isCreating && canCreate && scopeKey && scopeValue != null && (
         <KravNewRowInline
-          styckeId={styckeId}
+          scope={{ [scopeKey]: scopeValue } as KravListFilter}
           onCancel={() => setIsCreating(false)}
           onSaved={() => setIsCreating(false)}
         />
       )}
 
+      {/* Filas */}
       <div className='space-y-3 md:space-y-0'>
         {kravList.map((krav, rowIndex) => (
           <KravRowEditable
@@ -88,11 +121,11 @@ export const KravTableView = ({ styckeId }: { styckeId: number }) => {
 };
 
 const KravNewRowInline = ({
-  styckeId,
+  scope,
   onCancel,
   onSaved,
 }: {
-  styckeId: number;
+  scope: KravListFilter;
   onCancel: () => void;
   onSaved?: () => void;
 }) => {
@@ -109,7 +142,7 @@ const KravNewRowInline = ({
     onSave,
     onCancelClick,
     create,
-  } = useKravNewRow(styckeId, onCancel, onSaved);
+  } = useKravNewRow(scope, onCancel, onSaved);
 
   return (
     <div className='grid grid-cols-1 md:grid-cols-8 gap-3 md:gap-4 items-start md:items-center px-3 md:px-4 py-1 border-b last:border-b-0 transition-colors hover:bg-muted/40 md:hover:bg-transparent'>
@@ -143,6 +176,7 @@ const KravNewRowInline = ({
           onKeyDown={(e) => handleKeyDown(e, 1)}
           placeholder='Krav'
           className='h-11 md:h-9 text-sm'
+          hoverDelayMs={1000}
         />
       </div>
 
@@ -158,10 +192,11 @@ const KravNewRowInline = ({
           onKeyDown={(e) => handleKeyDown(e, 2)}
           placeholder='Anvisning'
           className='h-11 md:h-9 text-sm'
+          hoverDelayMs={1000}
         />
       </div>
 
-      {/* Desktop / Movil */}
+      {/* Acciones */}
       <div className='flex items-center gap-2 justify-start'>
         <Button
           type='button'
@@ -226,7 +261,8 @@ const KravRowEditable = ({
           onBlur={handleBlur}
           onKeyDown={(e) => handleKeyDown(e, 0)}
           placeholder='Krav'
-          className='h-11 md:h-9 text-sm'
+          className='h-11 md:h-9 text-sm whitespace-nowrap overflow-hidden text-ellipsis truncate resize-none'
+          hoverDelayMs={1000}
         />
       </div>
 
@@ -242,11 +278,12 @@ const KravRowEditable = ({
           onBlur={handleBlur}
           onKeyDown={(e) => handleKeyDown(e, 1)}
           placeholder='Anvisning'
-          className='h-11 md:h-9 text-sm'
+          className='h-11 md:h-9 text-sm whitespace-nowrap overflow-hidden text-ellipsis truncate resize-none'
+          hoverDelayMs={1000}
         />
       </div>
 
-      {/* betyg (0-5) */}
+      {/* betyg */}
       <div className='flex flex-col gap-1'>
         <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
           Betyg
@@ -273,7 +310,7 @@ const KravRowEditable = ({
         </Select>
       </div>
 
-      {/* jaNej */}
+      {/* Ja / Nej */}
       <div className='flex flex-col gap-1 w-14'>
         <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
           Ja / Nej
@@ -288,7 +325,7 @@ const KravRowEditable = ({
         />
       </div>
 
-      {/* verifikat */}
+      {/* Verifikat */}
       <div className='flex flex-col gap-1'>
         <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
           Verifikat
@@ -300,11 +337,12 @@ const KravRowEditable = ({
           onBlur={handleBlur}
           onKeyDown={(e) => handleKeyDown(e, 4)}
           placeholder='Verifikat'
-          className='h-11 md:h-9 text-sm'
+          className='h-11 md:h-9 text-sm whitespace-nowrap overflow-hidden text-ellipsis truncate resize-none'
+          hoverDelayMs={1000}
         />
       </div>
 
-      {/* kommentar + acciones */}
+      {/* Kommentar + acciones */}
       <div className='flex flex-col gap-1'>
         <span className='md:hidden text-[11px] font-medium text-muted-foreground uppercase tracking-wide'>
           Kommentar
@@ -316,13 +354,13 @@ const KravRowEditable = ({
           onBlur={handleBlur}
           onKeyDown={(e) => handleKeyDown(e, 5)}
           placeholder='Kommentar'
-          className='h-11 md:h-9 text-sm'
+          className='h-11 md:h-9 text-sm whitespace-nowrap overflow-hidden text-ellipsis truncate resize-none'
+          hoverDelayMs={1000}
         />
       </div>
 
       {/* Actions */}
       <div className='flex flex-col gap-1'>
-        {/* Mobile */}
         <div className='flex gap-2 md:hidden'>
           <Button
             type='button'
@@ -344,7 +382,6 @@ const KravRowEditable = ({
             Radera
           </Button>
         </div>
-        {/* Desktop */}
         <div className='hidden md:flex gap-1'>
           <Button
             type='button'

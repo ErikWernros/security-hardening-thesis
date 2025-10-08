@@ -18,7 +18,7 @@ import { useAuth } from '@/hooks/useAuth';
 // This requires that your tsconfig.json be configured to allow it.
 // Make sure the relative paths are correct.
 
-import type { UserPayload } from '../../../backend/src/types';
+import type { UserPayload } from '../../../backend/src/types/types';
 
 interface ProfileResponse {
   user: UserPayload;

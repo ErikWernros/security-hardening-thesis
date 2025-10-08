@@ -20,6 +20,8 @@ export type AmplifiedInputProps = Omit<
   UnifiedHandlers & {
     label?: string;
     value: string;
+    /** Delay (ms) para abrir por hover en Desktop. (default: 80) */
+    hoverDelayMs?: number;
   };
 
 /* ---------- Small utilities (no MutableRefObject / no any) ---------- */
@@ -66,7 +68,10 @@ const useIsMobile = (bp = 768) => {
 };
 
 /* ---------- Lightweight controller ---------- */
-const useCtrl = (onBlur?: UnifiedHandlers['onBlur']) => {
+const useCtrl = (
+  onBlur?: UnifiedHandlers['onBlur'],
+  hoverDelayMs: number = 80, // default idéntico al original
+) => {
   const [open, setOpen] = React.useState(false);
   const [intent, setIntent] = React.useState<Intent>('idle');
   const [active, setActive] = React.useState(false);
@@ -117,8 +122,8 @@ const useCtrl = (onBlur?: UnifiedHandlers['onBlur']) => {
       window.dispatchEvent(
         new CustomEvent<{ id: symbol }>('amplified:open', { detail: { id: id.current } }),
       );
-    }, 80);
-  }, []);
+    }, hoverDelayMs);
+  }, [hoverDelayMs]);
 
   const closeHover = React.useCallback((): void => {
     clearHover();
@@ -158,9 +163,13 @@ const useCtrl = (onBlur?: UnifiedHandlers['onBlur']) => {
 
 /* ---------- Component ---------- */
 export const AmplifiedInput = React.forwardRef<HTMLInputElement, AmplifiedInputProps>(
-  ({ value, onChange, onBlur, onKeyDown, placeholder, className, label, ...rest }, ref) => {
+  (
+    { value, onChange, onBlur, onKeyDown, placeholder, className, label, hoverDelayMs, ...rest },
+    ref,
+  ) => {
     const isMobile = useIsMobile();
-    const c = useCtrl(onBlur);
+    const delay = typeof hoverDelayMs === 'number' ? hoverDelayMs : 80; // default sin cambiar comportamiento
+    const c = useCtrl(onBlur, delay);
 
     const triggerRef = React.useRef<HTMLInputElement | null>(null);
     const editorRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -174,7 +183,7 @@ export const AmplifiedInput = React.forwardRef<HTMLInputElement, AmplifiedInputP
       return;
     }, [c.intent, c.open]);
 
-    // Handlers (unified)
+    // Handlers (unificados, sin cambio de comportamiento)
     const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => onChange?.(e);
     const onInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
       onBlur?.(e);
@@ -203,6 +212,7 @@ export const AmplifiedInput = React.forwardRef<HTMLInputElement, AmplifiedInputP
         onOpenChange={(next) => {
           if (!next) {
             if (c.skipNextOuterClose.current) {
+              // Ignora un cierre inmediatamente posterior al click del trigger.
               c.skipNextOuterClose.current = false;
               c.setOpen(true);
               c.setIntent('focus');
@@ -231,19 +241,24 @@ export const AmplifiedInput = React.forwardRef<HTMLInputElement, AmplifiedInputP
             }}
             onClick={() => c.openByFocus()}
             onPointerDownCapture={(e) => {
-              if (!isMobile && c.open) {
+              if (!isMobile) {
+                // 🟢 Clave: marcar el click del trigger SIEMPRE (también cuando está cerrado),
+                // para ignorar el cierre inmediato que hace Radix al re-procesar el pointer down.
                 c.skipNextOuterClose.current = true;
-                e.preventDefault();
-                c.setIntent('focus');
-                c.setActive(true);
-                c.setOpen(true);
-                window.setTimeout(() => editorRef.current?.focus(), 0);
+
+                if (c.open) {
+                  e.preventDefault();
+                  c.setIntent('focus');
+                  c.setActive(true);
+                  c.setOpen(true);
+                  window.setTimeout(() => editorRef.current?.focus(), 0);
+                }
               }
             }}
             onMouseEnter={() => {
               if (!isMobile) {
                 c.setHovered(true);
-                c.openByHover();
+                c.openByHover(); // usa el delay configurado (hoverDelayMs)
               }
             }}
             onMouseLeave={() => {
@@ -369,7 +384,6 @@ export const AmplifiedInput = React.forwardRef<HTMLInputElement, AmplifiedInputP
         onFocus={(e) => {
           c.setActive(true);
           // Keeping consumer onFocus behavior; cast is safe for consumers expecting input focus.
-
           rest.onFocus?.(e as unknown as React.FocusEvent<HTMLInputElement>);
         }}
         onBlur={(e) => {

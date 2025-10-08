@@ -1,3 +1,4 @@
+// src/controllers/kravController.ts
 import { Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
@@ -12,24 +13,51 @@ import {
 // 📍 GET CONTROLLER: Get krav list (with query filter/search)
 // ============================================================
 export const getKravList = async (req: Request, res: Response, next: NextFunction) => {
-  const { styckeId, search } = req.query;
+  const { styckeId, omradeId, avsnittId, search } = req.query;
+
   try {
     const whereClause: Prisma.KravWhereInput = {};
-    if (styckeId && typeof styckeId === 'string') {
-      whereClause.styckeId = parseInt(styckeId, 10);
+    const parsedStyckeId =
+      typeof styckeId === 'string' && styckeId.trim() !== ''
+        ? Number.parseInt(styckeId, 10)
+        : undefined;
+    const parsedOmradeId =
+      typeof omradeId === 'string' && omradeId.trim() !== ''
+        ? Number.parseInt(omradeId, 10)
+        : undefined;
+    const parsedAvsnittId =
+      typeof avsnittId === 'string' && avsnittId.trim() !== ''
+        ? Number.parseInt(avsnittId, 10)
+        : undefined;
+
+    // Enforce single-scope
+    const scopes = [parsedStyckeId, parsedOmradeId, parsedAvsnittId].filter(
+      (v) => typeof v === 'number'
+    );
+    if (scopes.length > 1) {
+      return res
+        .status(400)
+        .json({ error: 'Provide exactly one of styckeId, omradeId, or avsnittId' });
     }
-    if (search && typeof search === 'string') {
+
+    if (typeof parsedStyckeId === 'number') whereClause.styckeId = parsedStyckeId;
+    if (typeof parsedOmradeId === 'number') whereClause.omradeId = parsedOmradeId;
+    if (typeof parsedAvsnittId === 'number') whereClause.avsnittId = parsedAvsnittId;
+
+    if (typeof search === 'string' && search.trim() !== '') {
       whereClause.OR = [
         { kod: { contains: search, mode: 'insensitive' } },
         { kravText: { contains: search, mode: 'insensitive' } },
         { anvisning: { contains: search, mode: 'insensitive' } },
       ];
     }
+
     const krav = await prisma.krav.findMany({
       where: whereClause,
-      include: { stycke: true },
+      include: { stycke: true, omrade: true, avsnitt: true },
       orderBy: { kod: 'asc' },
     });
+
     res.json(krav);
   } catch (error) {
     next(error);
@@ -37,45 +65,72 @@ export const getKravList = async (req: Request, res: Response, next: NextFunctio
 };
 
 // ============================================================
-// ✍️ CREATE CONTROLLER: Create krav
+// ✍️ CREATE CONTROLLER: Create krav (ahora soporta 3 scopes)
 // ============================================================
 export const createKrav = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Use validatedBody for safer and stricter typing
-    const { styckeId, kod, ...rest } = req.validatedBody as CreateKravInput;
+    const { kod, kravText, anvisning, styckeId, avsnittId, omradeId } =
+      req.validatedBody as CreateKravInput;
 
-    // --- Uniqueness pre-check for 'kod' ---
-    // (Prevents duplicate codes before hitting DB unique constraint)
-    const existing = await prisma.krav.findUnique({ where: { kod } });
-    if (existing) {
-      // Respond with 409 Conflict so the frontend can show a user-friendly message
-      return res.status(409).json({
-        code: 'KRAV_KOD_DUPLICATE',
-        field: 'kod',
-        message: 'Koden är redan registrerad. Ange en unik kod.',
+    // Determinar scope (ya validado por Zod: exactamente uno)
+    type ScopeKey = 'styckeId' | 'avsnittId' | 'omradeId';
+    let scopeKey: ScopeKey;
+    let scopeValue: number;
+
+    if (typeof styckeId === 'number') {
+      scopeKey = 'styckeId';
+      scopeValue = styckeId;
+    } else if (typeof avsnittId === 'number') {
+      scopeKey = 'avsnittId';
+      scopeValue = avsnittId;
+    } else if (typeof omradeId === 'number') {
+      scopeKey = 'omradeId';
+      scopeValue = omradeId;
+    } else {
+      return res.status(400).json({
+        error: 'Provide exactly one of styckeId, avsnittId, or omradeId',
       });
     }
 
+    // Unicidad escoped (scopeKey, kod)
+    const existing = await prisma.krav.findFirst({
+      where: { kod, [scopeKey]: scopeValue } as Prisma.KravWhereInput,
+      select: { id: true },
+    });
+    if (existing) {
+      return res.status(409).json({
+        code: 'KRAV_KOD_DUPLICATE',
+        field: 'kod',
+        message: 'Koden är redan registrerad i denna kontext. Ange en unik kod.',
+      });
+    }
+
+    // Relación según scope
+    const relationData =
+      scopeKey === 'styckeId'
+        ? { stycke: { connect: { id: scopeValue } } }
+        : scopeKey === 'avsnittId'
+          ? { avsnitt: { connect: { id: scopeValue } } }
+          : { omrade: { connect: { id: scopeValue } } };
+
     const krav = await prisma.krav.create({
       data: {
-        ...rest,
         kod,
-        stycke: { connect: { id: styckeId } },
+        kravText,
+        anvisning,
+        ...relationData,
       },
+      include: { stycke: true, avsnitt: true, omrade: true },
     });
+
     return res.status(201).json(krav);
   } catch (error) {
-    // --- Race-condition safe-guard: Prisma unique violation ---
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      // If the unique index that failed includes 'kod', return a tailored 409 response
-      const targets = (error.meta?.target ?? []) as string[];
-      if (targets.includes('kod')) {
-        return res.status(409).json({
-          code: 'KRAV_KOD_DUPLICATE',
-          field: 'kod',
-          message: 'Koden är redan registrerad. Ange en unik kod.',
-        });
-      }
+      return res.status(409).json({
+        code: 'KRAV_KOD_DUPLICATE',
+        field: 'kod',
+        message: 'Koden är redan registrerad i denna kontext. Ange en unik kod.',
+      });
     }
     return next(error);
   }
@@ -86,7 +141,6 @@ export const createKrav = async (req: Request, res: Response, next: NextFunction
 // ============================================================
 export const updateKrav = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Use validatedParams and validatedBody for typesafe access
     const { id } = req.validatedParams as UpdateKravParams;
     const { styckeId, ...rest } = req.validatedBody as UpdateKravInput;
 
@@ -101,6 +155,13 @@ export const updateKrav = async (req: Request, res: Response, next: NextFunction
 
     return res.json(krav);
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return res.status(409).json({
+        code: 'KRAV_KOD_DUPLICATE',
+        field: 'kod',
+        message: 'Koden är redan registrerad i detta stycke. Ange en unik kod.',
+      });
+    }
     return next(error);
   }
 };
