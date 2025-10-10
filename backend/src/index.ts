@@ -16,6 +16,7 @@
  * -----------------------------------------------------------
  */
 // Import types and the global declaration file
+import './types/types';
 
 import './types';
 import express from 'express';

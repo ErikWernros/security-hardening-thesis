@@ -1,3 +1,17 @@
+// -------------------------------------
+// Backend shapes (strict, no 'any')
+// -------------------------------------
+export interface NodeBasic {
+  id: number;
+  kod: string;
+  namn: string;
+}
+export interface RawParents {
+  delId: number;
+  avsnittId: number;
+  omradeId: number;
+}
+
 export interface Del {
   id: number;
   kod: string;
@@ -11,11 +25,18 @@ export interface Avsnitt {
   delId: number;
 }
 
-export interface Stycke {
+export interface Omrade {
   id: number;
   kod: string;
   namn: string;
   avsnittId: number;
+}
+
+export interface Stycke {
+  id: number;
+  kod: string;
+  namn: string;
+  omradeId: number;
 }
 
 export interface Krav {
@@ -39,6 +60,26 @@ export interface SvarInput {
   jaNej: boolean | null;
   verifikat: string;
   kommentar: string;
+}
+
+export interface BrindCtx {
+  showSuccess: (message: string, timeout?: number) => void;
+  showWarning: (message: string, timeout?: number) => void;
+  showError: (message: string, timeout?: number) => void;
+}
+
+// Types aligned with your domain
+export interface CreateKravDTO {
+  styckeId: number;
+  kod: string;
+  kravText: string;
+  anvisning: string;
+}
+
+export interface BackendError {
+  code?: string;
+  field?: string;
+  message?: string;
 }
 
 export interface KravBreadcrumbsProps {

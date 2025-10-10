@@ -23,10 +23,28 @@ import { protectedRoute } from '../middleware/auth';
 import * as dataController from '../controllers/dataController';
 import * as delController from '../controllers/delController';
 import * as avsnittController from '../controllers/avsnittController';
+import * as omradeController from '../controllers/omradeController';
 import * as kravController from '../controllers/kravController';
 import * as svarController from '../controllers/svarController';
 import * as styckeController from '../controllers/styckeController';
 import { validate } from '../middleware/validate';
+
+import { createDelSchema, updateDelSchema, deleteDelSchema } from '../schemas/del.schema';
+import {
+  createAvsnittSchema,
+  updateAvsnittSchema,
+  deleteAvsnittSchema,
+} from '../schemas/avsnitt.schema';
+import {
+  createOmradeSchema,
+  updateOmradeSchema,
+  deleteOmradeSchema,
+} from '../schemas/omrade.schema';
+import {
+  createStyckeSchema,
+  updateStyckeSchema,
+  deleteStyckeSchema,
+} from '../schemas/stycke.schema';
 import { createKravSchema, updateKravSchema, deleteKravSchema } from '../schemas/krav.schema';
 import { svarSchema } from '../schemas/svar.schema';
 import multer from 'multer';
@@ -72,6 +90,7 @@ apiRouter.get('/admin-data', protectedRoute(['Admin']), (req: Request, res: Resp
   });
 });
 
+/** DEL */
 apiRouter.get('/del', protectedRoute(['Admin', 'Assessor', 'Viewer']), delController.getDelList);
 
 // ✅ NY ROUTE: Aggregate data för diagram
@@ -81,25 +100,132 @@ apiRouter.get(
   delController.getDelAggregate
 );
 
+apiRouter.post(
+  '/del',
+  protectedRoute(['Admin']),
+  validate(createDelSchema),
+  delController.createDel
+);
+
+apiRouter.put(
+  '/del/:id',
+  protectedRoute(['Admin']),
+  validate(updateDelSchema),
+  delController.updateDel
+);
+
+apiRouter.delete(
+  '/del/:id',
+  protectedRoute(['Admin']),
+  validate(deleteDelSchema),
+  delController.deleteDel
+);
+
+/** AVSNITT */
 apiRouter.get(
   '/avsnitt',
   protectedRoute(['Admin', 'Assessor', 'Viewer']),
   avsnittController.getAvsnittList
 );
 
-apiRouter.get(
-  '/stycke',
-  protectedRoute(['Admin', 'Assessor', 'Viewer']),
-  styckeController.getStyckeListByAvsnitt
+apiRouter.post(
+  '/avsnitt',
+  protectedRoute(['Admin']),
+  validate(createAvsnittSchema),
+  avsnittController.createAvsnitt
 );
 
-// Expansión automática del árbol
+apiRouter.put(
+  '/avsnitt/:id',
+  protectedRoute(['Admin']),
+  validate(updateAvsnittSchema),
+  avsnittController.updateAvsnitt
+);
+
+apiRouter.delete(
+  '/avsnitt/:id',
+  protectedRoute(['Admin']),
+  validate(deleteAvsnittSchema),
+  avsnittController.deleteAvsnitt
+);
+
+/** OMRADE */
+// Automatic tree expansion
+apiRouter.get(
+  '/omrade:id/parents',
+  protectedRoute(['Admin', 'Assessor', 'Viewer']),
+  omradeController.getOmradeParents
+);
+
+apiRouter.get(
+  '/omrade',
+  protectedRoute(['Admin', 'Assessor', 'Viewer']),
+  omradeController.getOmradeListByAvsnitt
+);
+
+apiRouter.get(
+  '/omrade',
+  protectedRoute(['Admin', 'Assessor', 'Viewer']),
+  omradeController.getOmradeListByDel
+);
+
+apiRouter.post(
+  '/omrade',
+  protectedRoute(['Admin']),
+  validate(createOmradeSchema),
+  omradeController.createOmrade
+);
+
+apiRouter.put(
+  '/omrade/:id',
+  protectedRoute(['Admin']),
+  validate(updateOmradeSchema),
+  omradeController.updateOmrade
+);
+
+apiRouter.delete(
+  '/omrade/:id',
+  protectedRoute(['Admin']),
+  validate(deleteOmradeSchema),
+  omradeController.deleteOmrade
+);
+
+/** STYCKE */
+// Automatic tree expansion
 apiRouter.get(
   '/stycke/:id/parents',
   protectedRoute(['Admin', 'Assessor', 'Viewer']),
   styckeController.getStyckeParents
 );
 
+apiRouter.get(
+  '/stycke',
+  protectedRoute(['Admin', 'Assessor', 'Viewer']),
+  styckeController.getStyckeListByOmrade
+);
+
+apiRouter.post(
+  '/stycke',
+  protectedRoute(['Admin']),
+  validate(createStyckeSchema),
+  styckeController.createStycke
+);
+
+apiRouter.put(
+  '/stycke/:id',
+  protectedRoute(['Admin']),
+  validate(updateStyckeSchema),
+  styckeController.updateStycke
+);
+
+apiRouter.delete(
+  '/stycke/:id',
+  protectedRoute(['Admin']),
+  validate(deleteStyckeSchema),
+  styckeController.deleteStycke
+);
+
+/** KRAV */
 apiRouter.get('/krav', protectedRoute(['Admin', 'Assessor', 'Viewer']), kravController.getKravList);
 
 apiRouter.post(
@@ -123,14 +249,27 @@ apiRouter.delete(
   kravController.deleteKrav
 );
 
-// Indicadores tipo semáforo
+/** SVAR */
+// Traffic light type indicators
 apiRouter.get(
   '/svar/stycke/:styckeId',
   protectedRoute(['Admin', 'Assessor', 'Viewer']),
   svarController.getSvarByStycke
 );
 
-// Guardado de respuestas (autosave por fila)
+apiRouter.get(
+  '/svar/avsnitt/:avsnittId',
+  protectedRoute(['Admin', 'Assessor', 'Viewer']),
+  svarController.getSvarByAvsnitt
+);
+
+apiRouter.get(
+  '/svar/omrade/:omradeId',
+  protectedRoute(['Admin', 'Assessor', 'Viewer']),
+  svarController.getSvarByOmrade
+);
+
+// Saving responses (autosave by row)
 apiRouter.put(
   '/svar/:kravId',
   protectedRoute(['Admin', 'Assessor']),

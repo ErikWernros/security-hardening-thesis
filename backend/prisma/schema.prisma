@@ -16,8 +16,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 /**
@@ -41,7 +42,7 @@ model User {
 
 model Del {
   id   Int    @id @default(autoincrement())
-  kod  String @unique // Add unique constraint
+  kod  String @unique
   namn String
 
   // Relation: A 'Del' contains many 'Avsnitt'
@@ -56,10 +57,34 @@ model Avsnitt {
   delId Int
   del   Del @relation(fields: [delId], references: [id])
 
-  // Relation: An 'Avsnitt' contains many 'Stycke'
-  styckes Stycke[]
+  // Back-relations
+  omrades Omrade[]
+  kravs   Krav[] // direct Avsnitt → Krav
 
-  @@unique([kod, delId]) // Add composite unique constraint
+  @@unique([kod, delId])
+  @@index([delId])
+}
+
+/**
+ * ===========
+ * Område
+ * ===========
+ */
+model Omrade {
+  id   Int    @id @default(autoincrement())
+  kod  String
+  namn String
+
+  // Område belongs to Avsnitt
+  avsnittId Int
+  avsnitt   Avsnitt @relation(fields: [avsnittId], references: [id])
+
+  // Back-relations
+  styckes Stycke[]
+  kravs   Krav[]
+
+  @@unique([kod, avsnittId])
+  @@index([avsnittId])
 }
 
 model Stycke {
@@ -67,26 +92,46 @@ model Stycke {
   kod  String
   namn String
 
-  avsnittId Int
-  avsnitt   Avsnitt @relation(fields: [avsnittId], references: [id])
+  // ❗ Ahora Stycke pertenece a Område (no a Avsnitt)
+  omradeId Int
+  omrade   Omrade @relation(fields: [omradeId], references: [id])
 
   // Relation: A 'Stycke' contains many 'Krav'
   kravs Krav[]
 
-  @@unique([kod, avsnittId]) // Add composite unique constraint
+  @@unique([kod, omradeId])
+  @@index([omradeId])
 }
 
 model Krav {
   id        Int     @id @default(autoincrement())
-  kod       String  @unique
+  kod       String
   kravText  String
   anvisning String?
 
-  styckeId Int
-  stycke   Stycke @relation(fields: [styckeId], references: [id])
+  // Rutas válidas (todas opcionales para migración segura):
+  // 1) Avsnitt → Krav
+  avsnittId Int?
+  avsnitt   Avsnitt? @relation(fields: [avsnittId], references: [id])
+
+  // 2) Avsnitt → Område → Krav
+  omradeId Int?
+  omrade   Omrade? @relation(fields: [omradeId], references: [id])
+
+  // 3) Avsnitt → Område → Stycke → Krav
+  styckeId Int?
+  stycke   Stycke? @relation(fields: [styckeId], references: [id])
 
   // Relation: A 'Krav' can have many 'Svar'
   svars Svar[]
+
+  // 👇 Uniqueness by scope (only applies when the field is not NULL)
+  @@unique([avsnittId, kod])
+  @@unique([omradeId, kod])
+  @@unique([styckeId, kod])
+  @@index([avsnittId])
+  @@index([omradeId])
+  @@index([styckeId])
 }
 
 model kravBedomningar {
@@ -98,19 +143,18 @@ model kravBedomningar {
 
 model Svar {
   id        Int      @id @default(autoincrement())
-  betyg     Int? // Corresponds to 'betyg' (smallint -> Int), optional
+  betyg     Int?
   jaNej     Boolean?
   verifikat String?
   kommentar String?
   createdAt DateTime @default(now())
 
   kravId Int
-  krav   Krav @relation(fields: [kravId], references: [id])
+  krav   Krav @relation(fields: [kravId], references: [id], onDelete: Cascade)
 
   userId Int
   user   User @relation(fields: [userId], references: [id])
 
-  // ADD THIS: Ensures a user can only have one answer per requirement.
-  // This is crucial for the 'upsert' logic.
+  // Ensure one answer per (krav, user)
   @@unique([kravId, userId])
 }
