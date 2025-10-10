@@ -13,6 +13,7 @@
  * -----------------------------------------------------------
  */
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Menubar,
   MenubarCheckboxItem,
@@ -34,6 +35,19 @@ interface MenubarNavProps {
 }
 
 export const MenubarNav: React.FC<MenubarNavProps> = ({ className = '' }) => {
+  const navigate = useNavigate();
+
+  const handleAnalyticsSelect = (value: string) => {
+    if (value === 'RadarChart') {
+      navigate('/radarchart');
+    } else if (value === 'BarChart') {
+      navigate('/analytics/barchart'); // ✅ Ny route för BarChart
+    } else if (value === 'KPI-kort') {
+      navigate('/analytics/kpi-cards'); // ✅ Ny route
+    }
+    // Lägg till fler conditions för andra analytics-alternativ här
+  };
+
   return (
     <Menubar className={`rounded-none border-none bg-transparent ${className}`}>
       <MenubarMenu>
@@ -106,18 +120,10 @@ export const MenubarNav: React.FC<MenubarNavProps> = ({ className = '' }) => {
         </MenubarContent>
       </MenubarMenu>
       <MenubarMenu>
-        <MenubarTrigger>Profiles</MenubarTrigger>
-        <MenubarContent>
-          <MenubarRadioGroup value='benoit'>
-            <MenubarRadioItem value='andy'>Andy</MenubarRadioItem>
-            <MenubarRadioItem value='benoit'>Benoit</MenubarRadioItem>
-            <MenubarRadioItem value='Luis'>Luis</MenubarRadioItem>
-          </MenubarRadioGroup>
-          <MenubarSeparator />
-          <MenubarItem inset>Edit...</MenubarItem>
-          <MenubarSeparator />
-          <MenubarItem inset>Add Profile...</MenubarItem>
-        </MenubarContent>
+        {/* ✅ UPPDATERAD: Enkel direktlänk till Dashboard */}
+        <MenubarTrigger onClick={() => navigate('/dashboard')}>
+          Kravtäckningsanalys
+        </MenubarTrigger>{' '}
       </MenubarMenu>
     </Menubar>
   );

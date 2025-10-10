@@ -89,6 +89,13 @@ model Krav {
   svars Svar[]
 }
 
+model kravBedomningar {
+  id      Int     @id @default(autoincrement())
+  del_id  Int
+  betyg   Float
+  // ... andra fält
+}
+
 model Svar {
   id        Int      @id @default(autoincrement())
   betyg     Int? // Corresponds to 'betyg' (smallint -> Int), optional

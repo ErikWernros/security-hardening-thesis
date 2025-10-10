@@ -15,6 +15,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/api/auth';
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useDelAggregate } from '@/hooks/useDel';
+import { RadarChart } from '@/components/ui/RadarChart';
+import { BarChart } from '@/components/ui/BarChart';
+import { KPICards } from '@/components/ui/KPICards';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ExportButton } from '@/components/ui/ExportButton';
 
 export const Dashboard = () => {
   const { saveToken } = useAuth();
@@ -32,22 +39,50 @@ export const Dashboard = () => {
   }, [location, navigate, saveToken]);
 
   // Use TanStack Query to get the profile data
-  const { data: user, isLoading, isError, error } = useProfile();
+  const { data: user, isLoading: profileLoading, isError: profileError, error } = useProfile();
 
-  if (isLoading) {
-    <p>Laddar din profilinformation...</p>;
+  // ✅ NY: Använd aggregate data för diagrammen
+  const { data: aggregateData, isLoading: dataLoading, error: dataError } = useDelAggregate();
+
+  if (profileLoading) {
+    return <p>Laddar din profilinformation...</p>;
   }
 
-  if (isError) {
+  if (profileError) {
     return <p className='text-destructive'>Error: {error.message}</p>;
   }
 
+  // ✅ Transformera data för komponenterna
+  const chartData = aggregateData?.map((item) => ({
+    subject: item.del,
+    score: item.medelbetyg,
+    fullMark: 5,
+  }));
+
+  const kpiData = aggregateData
+    ? {
+        totalaDelomraden: aggregateData.length,
+        hogstaBetyg: Math.max(...aggregateData.map((item) => item.medelbetyg)),
+        lagstaBetyg: Math.min(...aggregateData.map((item) => item.medelbetyg)),
+        genomsnittligBetyg:
+          aggregateData.reduce((sum, item) => sum + item.medelbetyg, 0) / aggregateData.length,
+        fordelning: {
+          hog: aggregateData.filter((item) => item.medelbetyg >= 4).length,
+          medel: aggregateData.filter((item) => item.medelbetyg >= 3 && item.medelbetyg < 4).length,
+          lag: aggregateData.filter((item) => item.medelbetyg < 3).length,
+        },
+      }
+    : null;
+
   return (
-    <div>
-      <h1 className='text-3xl font-bold'>Privat Dashboard</h1>
-      <p className='text-muted-foreground'>Detta är ditt säkra område.</p>
+    <div className='space-y-6'>
+      <div>
+        <h1 className='text-3xl font-bold'>Privat Dashboard</h1>
+        <p className='text-muted-foreground'>Detta är ditt säkra område.</p>
+      </div>
+
       {user && (
-        <div className='mt-6 border p-4 rounded-lg'>
+        <div className='border p-4 rounded-lg'>
           <h2 className='text-xl font-semibold'>Din profil</h2>
           <p>
             <strong>Email:</strong> {user.email}
@@ -61,6 +96,52 @@ export const Dashboard = () => {
           </p>
         </div>
       )}
+
+      {/* ✅ NY: Charts sektion med tabs */}
+      <div className='mt-8'>
+        <h2 className='text-2xl font-bold mb-4'>Kravtäckningsanalys</h2>
+
+        {dataLoading ? (
+          <div className='space-y-4'>
+            <Skeleton className='h-8 w-64' />
+            <Skeleton className='h-[400px] w-full' />
+          </div>
+        ) : dataError ? (
+          <p className='text-destructive'>Kunde inte ladda diagramdata: {dataError.message}</p>
+        ) : (
+          <Tabs defaultValue='radar' className='w-full'>
+            <TabsList className='grid w-full grid-cols-3'>
+              <TabsTrigger value='radar'>Radardiagram</TabsTrigger>
+              <TabsTrigger value='bar'>Stapeldiagram</TabsTrigger>
+              <TabsTrigger value='kpi'>KPI-kort</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value='radar' className='space-y-4'>
+              {/* ✅ NY: Export-knapp för radar */}
+              <div className='flex justify-end'>
+                <ExportButton data={chartData} type='radar' />
+              </div>
+              <RadarChart data={chartData} />
+            </TabsContent>
+
+            <TabsContent value='bar' className='space-y-4'>
+              {/* ✅ NY: Export-knapp för bar */}
+              <div className='flex justify-end'>
+                <ExportButton data={chartData} type='bar' />
+              </div>
+              <BarChart data={chartData} />
+            </TabsContent>
+
+            <TabsContent value='kpi' className='space-y-4'>
+              {/* ✅ NY: Export-knapp för kpi */}
+              <div className='flex justify-end'>
+                <ExportButton data={kpiData} type='kpi' />
+              </div>
+              {kpiData && <KPICards data={kpiData} />}
+            </TabsContent>
+          </Tabs>
+        )}
+      </div>
     </div>
   );
 };

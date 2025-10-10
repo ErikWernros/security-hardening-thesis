@@ -74,6 +74,13 @@ apiRouter.get('/admin-data', protectedRoute(['Admin']), (req: Request, res: Resp
 
 apiRouter.get('/del', protectedRoute(['Admin', 'Assessor', 'Viewer']), delController.getDelList);
 
+// ✅ NY ROUTE: Aggregate data för diagram
+apiRouter.get(
+  '/del/aggregate',
+  protectedRoute(['Admin', 'Assessor', 'Viewer']),
+  delController.getDelAggregate
+);
+
 apiRouter.get(
   '/avsnitt',
   protectedRoute(['Admin', 'Assessor', 'Viewer']),

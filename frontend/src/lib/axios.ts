@@ -13,7 +13,9 @@
 import axios from 'axios';
 
 // Creates an axios instance with your API base URL
-export const apiClient = axios.create();
+export const apiClient = axios.create({
+  baseURL: 'http://localhost:3001', // Backend-URL
+});
 /*export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
 });*/
