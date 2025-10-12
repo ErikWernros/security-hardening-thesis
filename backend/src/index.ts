@@ -17,14 +17,12 @@
  */
 // Import types and the global declaration file
 import './types/types';
-
-import './types';
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import authRouter from './routes/authRoutes';
 import apiRouter from './routes/apiRoutes';
-import aggregateRouter from './routes/aggregateRoutes'; // <-- Ny import
+//import aggregateRouter from './routes/aggregateRoutes'; // <-- Ny import
 
 dotenv.config();
 
@@ -38,7 +36,6 @@ app.use(express.urlencoded({ extended: true }));
 // Mounts the API router under the '/api' prefix
 app.use('/api', authRouter);
 app.use('/api', apiRouter);
-app.use('/api/aggregate', aggregateRouter);
 
 // Exports the app so that vite-plugin-node can serve it
 export { app };

@@ -15,7 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/api/auth';
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useDelAggregate } from '@/hooks/useDel';
+import { useDelAggregate } from '@/hooks/useAnalytics';
 import { RadarChart } from '@/components/ui/RadarChart';
 import { BarChart } from '@/components/ui/BarChart';
 import { KPICards } from '@/components/ui/KPICards';

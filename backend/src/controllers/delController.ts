@@ -12,24 +12,87 @@ export const getDelList = async (_req: Request, res: Response) => {
   }
 };
 
-// ✅ NY FUNKTION: Aggregate data för diagram
+// ✅ NY FUNKTION: Aggregate data för diagram - ROBUST LÖSNING
 export const getDelAggregate = async (_req: Request, res: Response) => {
   try {
-    const data = await prisma.kravBedomningar.groupBy({
-      by: ['del_id'],
-      _avg: { betyg: true },
+    // Steg 1: Hämta alla svar med betyg och avsnittId
+    const allaSvar = await prisma.svar.findMany({
+      where: {
+        betyg: { not: null },
+      },
+      select: {
+        betyg: true,
+        krav: {
+          select: {
+            avsnittId: true,
+          },
+        },
+      },
     });
 
-    const formattedData = data.map((item: any) => ({
-      del: `Del ${item.del_id}`,
-      medelbetyg: item._avg?.betyg || 0,
+    console.log('Hittade svar med betyg:', allaSvar.length);
+
+    // Om inga svar med betyg hittades
+    if (allaSvar.length === 0) {
+      console.log('Inga svar med betyg hittades i databasen');
+      return res.status(200).json([]);
+    }
+
+    // Steg 2: Hämta alla avsnitt med deras del-information
+    const allaAvsnitt = await prisma.avsnitt.findMany({
+      include: {
+        del: true,
+      },
+    });
+
+    // Steg 3: Gruppera betyg per avsnitt
+    const avsnittMap = new Map();
+
+    allaSvar.forEach((svar) => {
+      const avsnittId = svar.krav?.avsnittId;
+      if (avsnittId && svar.betyg !== null) {
+        if (!avsnittMap.has(avsnittId)) {
+          avsnittMap.set(avsnittId, { totalBetyg: 0, count: 0 });
+        }
+        const data = avsnittMap.get(avsnittId);
+        data.totalBetyg += svar.betyg;
+        data.count += 1;
+      }
+    });
+
+    console.log('Betyg grupperade per avsnitt:', Array.from(avsnittMap.entries()));
+
+    // Steg 4: Gruppera sedan per del
+    const delMap = new Map();
+
+    allaAvsnitt.forEach((avsnitt) => {
+      const delId = avsnitt.del.id;
+      const delNamn = avsnitt.del.namn || `Del ${delId}`;
+
+      const avsnittData = avsnittMap.get(avsnitt.id);
+      if (avsnittData && avsnittData.count > 0) {
+        if (!delMap.has(delId)) {
+          delMap.set(delId, { del: delNamn, totalBetyg: 0, count: 0 });
+        }
+        const delData = delMap.get(delId);
+        delData.totalBetyg += avsnittData.totalBetyg;
+        delData.count += avsnittData.count;
+      }
+    });
+
+    // Steg 5: Beräkna medelvärden per del
+    const formattedData = Array.from(delMap.values()).map((delData) => ({
+      del: delData.del,
+      medelbetyg: delData.totalBetyg / delData.count,
     }));
+
+    console.log('Slutlig data för diagram:', formattedData);
 
     res.status(200).json(formattedData);
   } catch (error) {
     console.error('Error fetching Del aggregate:', error);
 
-    // ✅ FALLBACK: Mock data om databasen failar (samma som din gamla)
+    // ✅ FALLBACK: Mock data om databasen failar
     const mockData = [
       { del: 'Del 1', medelbetyg: 3.5 },
       { del: 'Del 2', medelbetyg: 4.2 },
@@ -42,6 +105,9 @@ export const getDelAggregate = async (_req: Request, res: Response) => {
     ];
 
     res.json(mockData);
+  }
+};
+
 export const createDel = async (req: Request, res: Response) => {
   try {
     const { kod, namn } = req.body as { kod: string; namn: string };
