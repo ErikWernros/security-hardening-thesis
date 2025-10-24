@@ -277,4 +277,7 @@ apiRouter.put(
   svarController.saveSvar
 );
 
+// ✅ DEBUG route för att kolla databasens innehåll
+apiRouter.get('/debug-db', delController.debugDatabase);
+
 export default apiRouter;
