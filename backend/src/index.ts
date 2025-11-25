@@ -20,6 +20,8 @@ import './types/types';
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import helmet from 'helmet'; // <-- LÄGG TILL DENNA IMPORT
+import rateLimit from 'express-rate-limit'; // <-- LÄGG TILL DENNA IMPORT
 import authRouter from './routes/authRoutes';
 import apiRouter from './routes/apiRoutes';
 //import aggregateRouter from './routes/aggregateRoutes'; // <-- Ny import
@@ -27,6 +29,33 @@ import apiRouter from './routes/apiRoutes';
 dotenv.config();
 
 const app = express();
+
+// ✅ HELMET - Security headers
+app.use(helmet());
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+    },
+  })
+);
+
+// ✅ RATE LIMITING - DOS protection
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // Limit each IP to 100 requests per windowMs
+  message: {
+    error: 'Too many requests, please try again in 15 minutes.',
+    code: 'RATE_LIMIT_EXCEEDED',
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+app.use('/api/', limiter); // Apply to all API routes
 
 app.use(cors({ origin: process.env.FRONTEND_URL }));
 app.use(express.json());
