@@ -6,7 +6,6 @@ import { z } from 'zod';
 // ============================================================
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-// exactly one of the 3 scope ids (for CREATE)
 const hasExactlyOneScope = (v: {
   styckeId?: number | null;
   avsnittId?: number | null;
@@ -19,7 +18,6 @@ const hasExactlyOneScope = (v: {
   return c === 1;
 };
 
-// at most one of the 3 scope ids (for UPDATE, since body is partial)
 const hasAtMostOneScope = (v: {
   styckeId?: number | null;
   avsnittId?: number | null;
@@ -41,31 +39,54 @@ const kravParamsSchema = z.object({
 
 // ============================================================
 // Schema base para el cuerpo de la petición de Krav (reutilizable)
-// MISMA estructura que tenías, ahora con 3 scopes opcionales
 // ============================================================
-const kravBodySchema = z.object({
-  kod: z.string().min(1, { message: 'Code cannot be empty' }),
-  kravText: z.string().min(1, { message: 'Requirement text cannot be empty' }),
-  styckeId: z.coerce
-    .number()
-    .int()
-    .positive({ message: 'Stycke ID must be a positive integer' })
-    .optional(),
-  avsnittId: z.coerce
-    .number()
-    .int()
-    .positive({ message: 'Avsnitt ID must be a positive integer' })
-    .optional(),
-  omradeId: z.coerce
-    .number()
-    .int()
-    .positive({ message: 'Område ID must be a positive integer' })
-    .optional(),
-  anvisning: z.string().nullable().optional(),
-});
+const kravBodySchema = z
+  .object({
+    kod: z
+      .string()
+      .min(1, { message: 'Code cannot be empty' })
+      .max(50, { message: 'Code cannot exceed 50 characters' })
+      .refine((val) => !/<script|javascript:/i.test(val), {
+        message: 'Invalid characters detected in code',
+      }),
+    kravText: z
+      .string()
+      .min(1, { message: 'Requirement text cannot be empty' })
+      .max(2000, { message: 'Requirement text cannot exceed 2000 characters' })
+      .refine((val) => !/<script|javascript:/i.test(val), {
+        message: 'Invalid characters detected in requirement text',
+      }),
+    styckeId: z.coerce
+      .number()
+      .int()
+      .positive({ message: 'Stycke ID must be a positive integer' })
+      .optional()
+      .nullable(),
+    avsnittId: z.coerce
+      .number()
+      .int()
+      .positive({ message: 'Avsnitt ID must be a positive integer' })
+      .optional()
+      .nullable(),
+    omradeId: z.coerce
+      .number()
+      .int()
+      .positive({ message: 'Område ID must be a positive integer' })
+      .optional()
+      .nullable(),
+    anvisning: z
+      .string()
+      .max(1000, { message: 'Anvisning cannot exceed 1000 characters' })
+      .refine((val) => !val || !/<script|javascript:/i.test(val), {
+        message: 'Invalid characters detected in anvisning',
+      })
+      .nullable()
+      .optional(),
+  })
+  .strict(); // ← NYTT: Förbjud extra fält
 
 // ============================================================
-// Schemas compuestos (MISMA estructura/export names)
+// Schemas compuestos
 // ============================================================
 
 // POST /krav → exactamente UN scope
@@ -95,13 +116,13 @@ export const updateKravSchema = z.object({
   }),
 });
 
-// DELETE /krav/:id (sin cambios)
+// DELETE /krav/:id
 export const deleteKravSchema = z.object({
   params: kravParamsSchema,
 });
 
 // ============================================================
-// Tipos inferidos (MISMA firma pública)
+// Tipos inferidos
 // ============================================================
 export type CreateKravInput = z.infer<typeof createKravSchema>['body'];
 export type UpdateKravInput = z.infer<typeof updateKravSchema>['body'];

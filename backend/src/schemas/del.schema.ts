@@ -1,12 +1,15 @@
+// src/schemas/del.schema.ts
 import { z } from 'zod';
 import { kodSchema, namnSchema, idParams } from './common.schema';
 
 // POST /del
 export const createDelSchema = {
-  body: z.object({
-    kod: kodSchema,
-    namn: namnSchema,
-  }),
+  body: z
+    .object({
+      kod: kodSchema,
+      namn: namnSchema,
+    })
+    .strict(), // ← NYTT: Förbjud extra fält
 };
 
 // PUT /del/:id
@@ -17,7 +20,10 @@ export const updateDelSchema = {
       kod: kodSchema.optional(),
       namn: namnSchema.optional(),
     })
-    .refine((b) => Object.keys(b).length > 0, 'No fields to update'),
+    .refine((data) => Object.keys(data).length > 0, {
+      message: 'At least one field must be provided for update',
+    })
+    .strict(), // ← NYTT: Förbjud extra fält
 };
 
 // DELETE /del/:id
